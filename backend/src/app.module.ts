@@ -4,19 +4,21 @@ import { AppController } from './app.controller';
 import { AppService } from './app.service';
 import { PrismaModule } from './prisma';
 import { PuzzlesModule } from './modules/puzzles';
+import { AuthModule } from './modules/auth';
 
 @Module({
   imports: [
     // Configuration
     ConfigModule.forRoot({
       isGlobal: true,
-      envFilePath: '.env',
+      envFilePath: '../.env',
     }),
 
     // Database
     PrismaModule,
 
     // Feature modules
+    AuthModule,
     PuzzlesModule,
   ],
   controllers: [AppController],
