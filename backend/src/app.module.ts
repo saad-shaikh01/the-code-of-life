@@ -5,6 +5,7 @@ import { AppService } from './app.service';
 import { PrismaModule } from './prisma';
 import { PuzzlesModule } from './modules/puzzles';
 import { AuthModule } from './modules/auth';
+import { UsersModule } from './modules/users';
 
 @Module({
   imports: [
@@ -19,6 +20,7 @@ import { AuthModule } from './modules/auth';
 
     // Feature modules
     AuthModule,
+    UsersModule,
     PuzzlesModule,
   ],
   controllers: [AppController],
