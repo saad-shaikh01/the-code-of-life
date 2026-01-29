@@ -1,0 +1,24 @@
+# Dependencies
+node_modules/
+.pnp
+.pnp.js
+
+# Next.js & Build outputs
+.next/
+dist/
+build/
+out/
+
+# Environment variables
+.env
+*.env.local
+.env.*.local
+
+# IDEs & OS
+.vscode/
+.idea/
+.DS_Store
+*.log
+
+# Prisma
+backend/prisma/generated/

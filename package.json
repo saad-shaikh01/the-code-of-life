@@ -20,5 +20,8 @@
     "mindfulness"
   ],
   "author": "",
-  "license": "UNLICENSED"
+  "license": "UNLICENSED",
+  "dependencies": {
+    "zod": "^4.3.6"
+  }
 }
