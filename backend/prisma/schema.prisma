@@ -1,0 +1,155 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+  output   = "../generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ==================== ENUMS ====================
+
+enum GameMode {
+  STORY
+  CHALLENGE
+  DAILY
+}
+
+enum Difficulty {
+  BEGINNER
+  INTERMEDIATE
+  ADVANCED
+  MASTER
+}
+
+// ==================== USER MODEL ====================
+// Handles authentication and cloud saves for user progress
+
+model User {
+  id        String  @id @default(cuid())
+  email     String  @unique
+  username  String  @unique
+  password  String
+  avatarUrl String?
+
+  // Cloud Save Data
+  currentLevel Int       @default(1)
+  totalScore   Int       @default(0)
+  streakDays   Int       @default(0)
+  lastPlayedAt DateTime?
+
+  // Timestamps
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // Relations
+  progress     UserProgress[]
+  achievements UserAchievement[]
+
+  @@index([email])
+  @@index([username])
+}
+
+// ==================== PUZZLE MODEL ====================
+// Stores encrypted patterns and their original reflections from 'The Code of Life' book
+
+model Puzzle {
+  id    String @id @default(cuid())
+  title String
+
+  // The encrypted message (symbols, numbers, punctuation)
+  encryptedPattern String @db.Text
+
+  // The original reflection/life lesson from the book (decrypted message)
+  originalReflection String @db.Text
+
+  // Book reference
+  bookChapter Int?
+  bookSection String?
+  bookPageRef String?
+
+  // Puzzle metadata
+  gameMode   GameMode
+  difficulty Difficulty
+  orderIndex Int        @default(0)
+
+  // For Daily Code puzzles
+  scheduledDate DateTime? @unique
+
+  // Hint system
+  hints String[] @default([])
+
+  // Timestamps
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // Relations
+  userProgress UserProgress[]
+
+  @@index([gameMode])
+  @@index([difficulty])
+  @@index([scheduledDate])
+}
+
+// ==================== USER PROGRESS ====================
+// Tracks which puzzles users have completed (cloud save support)
+
+model UserProgress {
+  id String @id @default(cuid())
+
+  userId   String
+  puzzleId String
+
+  completed   Boolean   @default(false)
+  completedAt DateTime?
+  score       Int       @default(0)
+  timeSpent   Int       @default(0) // in seconds
+  hintsUsed   Int       @default(0)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  puzzle Puzzle @relation(fields: [puzzleId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, puzzleId])
+  @@index([userId])
+  @@index([puzzleId])
+}
+
+// ==================== ACHIEVEMENTS ====================
+// Gamification system for user engagement
+
+model Achievement {
+  id          String  @id @default(cuid())
+  name        String  @unique
+  description String
+  iconUrl     String?
+  points      Int     @default(0)
+
+  // Unlock criteria (stored as JSON for flexibility)
+  criteria String @db.Text
+
+  createdAt DateTime @default(now())
+
+  users UserAchievement[]
+}
+
+model UserAchievement {
+  id String @id @default(cuid())
+
+  userId        String
+  achievementId String
+
+  unlockedAt DateTime @default(now())
+
+  user        User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+  achievement Achievement @relation(fields: [achievementId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, achievementId])
+  @@index([userId])
+}
