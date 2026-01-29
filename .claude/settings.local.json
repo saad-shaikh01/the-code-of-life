@@ -2,7 +2,11 @@
   "permissions": {
     "allow": [
       "Bash(npx prisma init:*)",
-      "Bash(npx prisma format:*)"
+      "Bash(npx prisma format:*)",
+      "Bash(npm install:*)",
+      "Bash(git add:*)",
+      "Bash(git commit:*)",
+      "Bash(npx tsc:*)"
     ]
   }
 }

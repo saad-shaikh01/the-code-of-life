@@ -1,5 +1,6 @@
 import { ThemeProvider } from "@/modules/theme/contexts/theme-provider";
 import { QueryProvider } from "@/components/providers/query-provider";
+import { ToastProvider } from "@/components/ui/toast";
 import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
 import type { Metadata } from "next";
@@ -30,8 +31,10 @@ export default function RootLayout({
         className={`${geistSans.variable} ${geistMono.variable} antialiased`}
       >
         <QueryProvider>
-          <ThemeProvider defaultTheme="system">
-            {children}
+          <ThemeProvider defaultTheme="dark">
+            <ToastProvider>
+              {children}
+            </ToastProvider>
           </ThemeProvider>
         </QueryProvider>
       </body>

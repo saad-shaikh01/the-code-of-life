@@ -13,8 +13,13 @@ async function bootstrap() {
   // Global prefix for all routes
   app.setGlobalPrefix('api');
 
-  // Enable CORS
-  app.enableCors();
+  // Enable CORS with explicit configuration
+  app.enableCors({
+    origin: ['http://localhost:3000', 'http://127.0.0.1:3000'],
+    methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
+    allowedHeaders: ['Content-Type', 'Authorization'],
+    credentials: true,
+  });
 
   // Swagger configuration
   const swaggerConfig = new DocumentBuilder()
