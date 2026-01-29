@@ -1,0 +1,24 @@
+{
+  "name": "the-code-of-life",
+  "version": "1.0.0",
+  "private": true,
+  "description": "The Code of Life - Interactive Puzzle Game Monorepo",
+  "workspaces": [
+    "packages/*",
+    "frontend",
+    "backend"
+  ],
+  "scripts": {
+    "dev": "npm run dev --workspaces --if-present",
+    "build": "npm run build --workspaces --if-present",
+    "lint": "npm run lint --workspaces --if-present",
+    "test": "npm run test --workspaces --if-present"
+  },
+  "keywords": [
+    "puzzle",
+    "game",
+    "mindfulness"
+  ],
+  "author": "",
+  "license": "UNLICENSED"
+}
