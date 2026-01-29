@@ -1,0 +1,53 @@
+/**
+ * Application Configuration Constants
+ *
+ * @description Central configuration for the frontend application
+ * @author Lead Engineer
+ */
+
+export const API_CONFIG = {
+  BASE_URL: process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3000/api',
+  TIMEOUT: 30000,
+  RETRY_ATTEMPTS: 3,
+} as const;
+
+export const AUTH_CONFIG = {
+  ACCESS_TOKEN_KEY: 'code_of_life_access_token',
+  REFRESH_TOKEN_KEY: 'code_of_life_refresh_token',
+  USER_KEY: 'code_of_life_user',
+  TOKEN_REFRESH_THRESHOLD: 5 * 60 * 1000, // 5 minutes before expiry
+} as const;
+
+export const GAME_CONFIG = {
+  MODES: ['STORY', 'CHALLENGE', 'DAILY'] as const,
+  DIFFICULTIES: ['BEGINNER', 'INTERMEDIATE', 'ADVANCED', 'MASTER'] as const,
+  HINTS_PER_PUZZLE: 3,
+  POINTS_PER_CORRECT: 100,
+  POINTS_DEDUCTION_PER_HINT: 25,
+  TIME_BONUS_THRESHOLD: 60, // seconds
+} as const;
+
+export const UI_CONFIG = {
+  ANIMATION_DURATION: 0.3,
+  TOAST_DURATION: 5000,
+  DEBOUNCE_DELAY: 300,
+  PAGINATION_LIMIT: 10,
+} as const;
+
+export const ROUTES = {
+  // Public routes
+  HOME: '/',
+  LOGIN: '/login',
+  REGISTER: '/register',
+
+  // Protected routes
+  DASHBOARD: '/dashboard',
+  PUZZLE: (id: string) => `/puzzle/${id}`,
+  DAILY: '/daily',
+  STORY: '/story',
+  CHALLENGE: '/challenge',
+  PROFILE: '/profile',
+  SETTINGS: '/settings',
+  LEADERBOARDS: '/leaderboards',
+  ACHIEVEMENTS: '/achievements',
+} as const;

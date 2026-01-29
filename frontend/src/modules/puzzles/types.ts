@@ -1,4 +1,5 @@
-import { z } from 'zod';
-import { puzzleSchema } from '@shared/schemas';
-
-export type Puzzle = z.infer<typeof puzzleSchema>;
+export interface Puzzle {
+  title: string;
+  description: string;
+  difficulty: string;
+}
