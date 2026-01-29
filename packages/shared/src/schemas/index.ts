@@ -10,6 +10,9 @@ export * from './user.schema';
 // Progress schemas
 export * from './progress.schema';
 
+// Achievement schemas
+export * from './achievement.schema';
+
 // Puzzle schemas
 export * from './puzzle.schema';
 
