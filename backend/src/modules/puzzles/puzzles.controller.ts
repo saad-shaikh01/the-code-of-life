@@ -43,7 +43,7 @@ import {
   ValidationResult,
 } from './schemas/decoder.schema';
 import { ApiResponseDto, PaginatedResponseDto } from '../../common/dto';
-import { Puzzle } from '../../../generated/prisma';
+import { Puzzle } from '@prisma/client';
 
 @ApiTags('puzzles')
 @Controller('puzzles')

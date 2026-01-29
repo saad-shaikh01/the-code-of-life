@@ -1,6 +1,6 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../../prisma';
-import { Puzzle, Prisma } from '../../../generated/prisma';
+import { Puzzle, Prisma } from '@prisma/client';
 import {
   CreatePuzzleInput,
   UpdatePuzzleInput,
@@ -65,7 +65,8 @@ export class PuzzlesService {
     const tomorrow = new Date(today);
     tomorrow.setDate(tomorrow.getDate() + 1);
 
-    return this.prisma.puzzle.findFirst({
+    // Try to find a scheduled puzzle for today
+    let puzzle = await this.prisma.puzzle.findFirst({
       where: {
         gameMode: 'DAILY',
         scheduledDate: {
@@ -74,6 +75,42 @@ export class PuzzlesService {
         },
       },
     });
+
+    // Fallback: If no scheduled puzzle, use deterministic selection
+    if (!puzzle) {
+      puzzle = await this.getDeterministicDailyPuzzle(today);
+    }
+
+    return puzzle;
+  }
+
+  /**
+   * Fallback: Select a puzzle deterministically based on date.
+   * This ensures the same puzzle is shown all day without needing scheduling.
+   */
+  private async getDeterministicDailyPuzzle(date: Date): Promise<Puzzle | null> {
+    // Get all available puzzles (prefer DAILY, fallback to STORY)
+    const availablePuzzles = await this.prisma.puzzle.findMany({
+      where: {
+        OR: [
+          { gameMode: 'DAILY', scheduledDate: null },
+          { gameMode: 'STORY' },
+        ],
+      },
+      orderBy: { orderIndex: 'asc' },
+    });
+
+    if (availablePuzzles.length === 0) {
+      return null;
+    }
+
+    // Use day of year to select puzzle deterministically
+    const startOfYear = new Date(date.getFullYear(), 0, 0);
+    const diff = date.getTime() - startOfYear.getTime();
+    const dayOfYear = Math.floor(diff / (1000 * 60 * 60 * 24));
+
+    const index = dayOfYear % availablePuzzles.length;
+    return availablePuzzles[index];
   }
 
   async update(
