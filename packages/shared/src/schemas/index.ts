@@ -7,6 +7,9 @@ export * from './auth.schema';
 // User schemas
 export * from './user.schema';
 
+// Progress schemas
+export * from './progress.schema';
+
 // Puzzle schemas
 export * from './puzzle.schema';
 
