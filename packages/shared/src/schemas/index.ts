@@ -13,6 +13,9 @@ export * from './progress.schema';
 // Achievement schemas
 export * from './achievement.schema';
 
+// Leaderboard schemas
+export * from './leaderboard.schema';
+
 // Puzzle schemas
 export * from './puzzle.schema';
 

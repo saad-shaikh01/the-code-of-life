@@ -8,6 +8,7 @@ import { AuthModule } from './modules/auth';
 import { UsersModule } from './modules/users';
 import { ProgressModule } from './modules/progress';
 import { AchievementsModule } from './modules/achievements';
+import { LeaderboardsModule } from './modules/leaderboards';
 
 @Module({
   imports: [
@@ -25,6 +26,7 @@ import { AchievementsModule } from './modules/achievements';
     UsersModule,
     ProgressModule,
     AchievementsModule,
+    LeaderboardsModule,
     PuzzlesModule,
   ],
   controllers: [AppController],
