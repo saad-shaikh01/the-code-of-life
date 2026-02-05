@@ -7,7 +7,9 @@ import { LoggingInterceptor } from './common/interceptors';
 import { HttpExceptionFilter } from './common/filters';
 
 async function bootstrap() {
-  const app = await NestFactory.create(AppModule);
+  const app = await NestFactory.create(AppModule, {
+    rawBody: true, // Enable raw body for Stripe webhooks
+  });
   const logger = new Logger('Bootstrap');
 
   // Global prefix for all routes
@@ -32,6 +34,7 @@ async function bootstrap() {
     .setVersion('1.0')
     .addTag('puzzles', 'Puzzle management and retrieval')
     .addTag('decoder', 'Symbol encoding/decoding operations')
+    .addTag('billing', 'Subscription and billing management')
     .addBearerAuth()
     .build();
 

@@ -21,3 +21,6 @@ export * from './puzzle.schema';
 
 // Decoder schemas
 export * from './decoder.schema';
+
+// Multiplayer schemas
+export * from './multiplayer.schema';

@@ -25,6 +25,22 @@ enum Difficulty {
   MASTER
 }
 
+enum SubscriptionStatus {
+  ACTIVE
+  CANCELED
+  PAST_DUE
+  TRIALING
+  INCOMPLETE
+  INCOMPLETE_EXPIRED
+  UNPAID
+}
+
+enum SubscriptionTier {
+  FREE
+  PRO
+  PREMIUM
+}
+
 // ==================== USER MODEL ====================
 // Handles authentication and cloud saves for user progress
 
@@ -41,6 +57,10 @@ model User {
   streakDays   Int       @default(0)
   lastPlayedAt DateTime?
 
+  // Growth Avatar System
+  growthPoints Int       @default(0)
+  growthStage  Int       @default(1) // 1=Seed, 2=Sprout, 3=Sapling, 4=Young Tree, 5=Mature Tree
+
   // Timestamps
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -48,9 +68,46 @@ model User {
   // Relations
   progress     UserProgress[]
   achievements UserAchievement[]
+  subscription Subscription?
 
   @@index([email])
   @@index([username])
+}
+
+// ==================== SUBSCRIPTION MODEL ====================
+// Handles Stripe subscription data for monetization
+
+model Subscription {
+  id     String @id @default(cuid())
+  userId String @unique
+
+  // Stripe identifiers
+  stripeCustomerId     String  @unique
+  stripeSubscriptionId String? @unique
+  stripePriceId        String?
+
+  // Subscription details
+  tier   SubscriptionTier   @default(FREE)
+  status SubscriptionStatus @default(ACTIVE)
+
+  // Billing period
+  currentPeriodStart DateTime?
+  currentPeriodEnd   DateTime?
+  cancelAtPeriodEnd  Boolean   @default(false)
+
+  // Trial info
+  trialStart DateTime?
+  trialEnd   DateTime?
+
+  // Timestamps
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // Relations
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([stripeCustomerId])
+  @@index([status])
 }
 
 // ==================== PUZZLE MODEL ====================

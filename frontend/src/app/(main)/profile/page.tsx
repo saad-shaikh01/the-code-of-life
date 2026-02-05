@@ -14,14 +14,17 @@ import {
   Calendar,
   ChevronRight,
   Settings,
+  Leaf,
 } from "lucide-react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { useAuthStore } from "@/stores";
-import { useUserProgress, useUserAchievements } from "@/hooks";
+import { useUserProgress, useUserAchievements, useSubscriptionStatus } from "@/hooks";
 import { usersService } from "@/api";
 import { useQuery } from "@tanstack/react-query";
 import { PageHeader } from "@/components/layout";
 import { Card, CardHeader, CardTitle, CardContent, Avatar, Button, Progress, Skeleton, Badge } from "@/components/ui";
+import { GrowthAvatar, LockedOverlay, LockedBadge } from "@/components/zen";
 import { cn } from "@/lib/utils";
 
 const containerVariants = {
@@ -38,7 +41,9 @@ const itemVariants = {
 };
 
 export default function ProfilePage() {
+  const router = useRouter();
   const { user } = useAuthStore();
+  const { isPro, isLoading: subscriptionLoading } = useSubscriptionStatus();
 
   // Fetch user stats
   const { data: statsData, isLoading: statsLoading } = useQuery({
@@ -49,6 +54,10 @@ export default function ProfilePage() {
 
   const { data: progressData, isLoading: progressLoading } = useUserProgress();
   const { data: achievementsData, isLoading: achievementsLoading } = useUserAchievements();
+
+  const handleUpgradeClick = () => {
+    router.push('/pricing');
+  };
 
   const stats = statsData?.data;
 
@@ -149,6 +158,37 @@ export default function ProfilePage() {
                   })}
                 </span>
               </div>
+            </CardContent>
+          </Card>
+
+          {/* Growth Avatar Section */}
+          <Card className="mt-6">
+            <CardHeader className="flex flex-row items-center justify-between">
+              <CardTitle className="flex items-center gap-2">
+                <Leaf className="h-5 w-5 text-green-400" />
+                Growth Journey
+              </CardTitle>
+              {!isPro && !subscriptionLoading && <LockedBadge tier="PRO" />}
+            </CardHeader>
+            <CardContent>
+              <LockedOverlay
+                isLocked={!isPro && !subscriptionLoading}
+                featureName="Growth Avatar"
+                requiredTier="PRO"
+                onUpgradeClick={handleUpgradeClick}
+                blur={true}
+                className="min-h-[200px]"
+              >
+                <div className="flex justify-center">
+                  <GrowthAvatar
+                    growthPoints={user.totalScore || 0}
+                    growthStage={Math.min(5, Math.floor((user.totalScore || 0) / 1000) + 1)}
+                    size="lg"
+                    showLabel={true}
+                    animated={true}
+                  />
+                </div>
+              </LockedOverlay>
             </CardContent>
           </Card>
         </motion.div>

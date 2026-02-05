@@ -13,3 +13,5 @@ export { progressService } from './services/progress.service';
 export { usersService } from './services/users.service';
 export { achievementsService } from './services/achievements.service';
 export { leaderboardsService } from './services/leaderboards.service';
+export { billingService } from './services/billing.service';
+export type { Subscription, CheckoutSessionResponse, PortalSessionResponse } from './services/billing.service';

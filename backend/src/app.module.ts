@@ -9,6 +9,8 @@ import { UsersModule } from './modules/users';
 import { ProgressModule } from './modules/progress';
 import { AchievementsModule } from './modules/achievements';
 import { LeaderboardsModule } from './modules/leaderboards';
+import { BillingModule } from './modules/billing';
+import { BattleModule } from './modules/battle';
 
 @Module({
   imports: [
@@ -28,6 +30,8 @@ import { LeaderboardsModule } from './modules/leaderboards';
     AchievementsModule,
     LeaderboardsModule,
     PuzzlesModule,
+    BillingModule,
+    BattleModule,
   ],
   controllers: [AppController],
   providers: [AppService],

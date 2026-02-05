@@ -242,3 +242,337 @@ function PuzzleGame() {
 ## Next Steps (For Gemini/Junior Devs)
 
 See `FRONTEND_TASKS.md` for detailed task breakdown.
+
+---
+
+## Session: 2026-02-05 - Subscriptions & Multiplayer Update
+
+### New Features Implemented
+
+#### 1. Billing & Subscription System
+- [x] Billing API service (`/api/services/billing.service.ts`)
+- [x] Pricing page (`/pricing`) with 3 tiers
+- [x] Subscription management page (`/subscription`)
+- [x] Stripe Checkout integration
+- [x] Billing portal redirect
+
+#### 2. Real-time Multiplayer (Battle Mode)
+- [x] WebSocket hook (`/hooks/useBattleSocket.ts`)
+- [x] Battle page (`/battle`) with full game flow
+- [x] Matchmaking by difficulty
+- [x] Real-time opponent progress bars
+- [x] Game over with scores and results
+
+---
+
+## New Pages
+
+| Route | Purpose | Auth Required |
+|-------|---------|---------------|
+| `/pricing` | Subscription pricing tiers | No |
+| `/subscription` | Manage subscription | Yes |
+| `/battle` | Real-time multiplayer battles | Yes |
+
+---
+
+## New API Services
+
+### Billing Service (`/api/services/billing.service.ts`)
+
+| Method | Description |
+|--------|-------------|
+| `getSubscription()` | Get current user's subscription |
+| `createCheckoutSession(priceId, successUrl, cancelUrl)` | Create Stripe checkout |
+| `createPortalSession(returnUrl)` | Open billing portal |
+
+---
+
+## New Hooks
+
+### `useBattleSocket()` Hook
+
+Real-time WebSocket connection for Battle Mode.
+
+**State:**
+- `isConnected` - WebSocket connection status
+- `lobby` - Current lobby data
+- `matchData` - Active match puzzle data
+- `opponentProgress` - Real-time opponent progress
+- `gameOver` - Game results
+- `error` - Error state
+
+**Actions:**
+- `joinLobby(lobbyId?, difficulty?)` - Join or find match
+- `leaveLobby()` - Leave current lobby
+- `setReady(isReady)` - Toggle ready state
+- `updateProgress(data)` - Send progress to opponents
+- `submitSolution(solution, timeElapsed)` - Submit final answer
+- `resetState()` - Reset all state
+
+---
+
+## Updated Folder Structure
+
+```
+frontend/src/
+├── api/
+│   └── services/
+│       └── billing.service.ts  # NEW
+│
+├── app/(main)/
+│   ├── pricing/
+│   │   └── page.tsx            # NEW - Pricing tiers
+│   ├── subscription/
+│   │   └── page.tsx            # NEW - Subscription management
+│   └── battle/
+│       └── page.tsx            # NEW - Multiplayer battles
+│
+├── hooks/
+│   └── useBattleSocket.ts      # NEW - WebSocket hook
+│
+└── config/
+    └── constants.ts            # Updated with STRIPE_CONFIG
+```
+
+---
+
+## Updated Configuration
+
+### New Constants (`/config/constants.ts`)
+
+```typescript
+export const ROUTES = {
+  // ... existing routes
+  PRICING: '/pricing',
+  SUBSCRIPTION: '/subscription',
+  BATTLE: '/battle',
+} as const;
+
+export const STRIPE_CONFIG = {
+  PRO_PRICE_ID: process.env.NEXT_PUBLIC_STRIPE_PRO_PRICE_ID || 'price_pro_monthly',
+  PREMIUM_PRICE_ID: process.env.NEXT_PUBLIC_STRIPE_PREMIUM_PRICE_ID || 'price_premium_monthly',
+} as const;
+```
+
+---
+
+## New Environment Variables
+
+```env
+# Stripe (Frontend)
+NEXT_PUBLIC_STRIPE_PRO_PRICE_ID=price_pro_monthly
+NEXT_PUBLIC_STRIPE_PREMIUM_PRICE_ID=price_premium_monthly
+
+# WebSocket
+NEXT_PUBLIC_WS_URL=http://localhost:3001
+```
+
+---
+
+## New Dependencies Added
+
+- `socket.io-client` - Socket.IO client for real-time multiplayer
+
+---
+
+## Updated Sidebar Navigation
+
+Added new navigation links:
+- **Subscription** - Subscription management (with CreditCard icon)
+- **Battle Mode** - Multiplayer battles (with Swords icon)
+
+---
+
+## Pricing Page Features
+
+- 3 pricing tiers: Free, Pro ($9.99/mo), Premium ($19.99/mo)
+- Feature comparison list
+- 7-day free trial on paid plans
+- Animated cards with Framer Motion
+- FAQ section
+
+---
+
+## Battle Mode Features
+
+1. **Difficulty Selection** - BEGINNER, INTERMEDIATE, ADVANCED, MASTER
+2. **Matchmaking** - Find opponent or create lobby
+3. **Lobby System** - Ready state, player list
+4. **Real-time Gameplay**:
+   - Countdown timer before match
+   - Encrypted puzzle display
+   - Progress bars (you vs opponent)
+   - Game timer
+5. **Game Over Screen**:
+   - Winner announcement
+   - Score breakdown
+   - Time comparison
+   - Play again option
+
+---
+
+## Session: 2026-02-05 - Zen & Growth Experience Update
+
+### Zen-Mode UI System (TASK2.md Phase 1)
+
+Premium mindfulness UI components with Framer Motion animations.
+
+#### Zen Components (`/components/zen/`)
+
+| Component | File | Description |
+|-----------|------|-------------|
+| `BreathingContainer` | `breathing-container.tsx` | Page transitions with breathing effect |
+| `BreathingText` | `breathing-container.tsx` | Staggered text animations |
+| `PulsingGlow` | `breathing-container.tsx` | Ambient background glow |
+| `ParticleEffects` | `particle-effects.tsx` | Success/celebration particles |
+| `GlowBurst` | `particle-effects.tsx` | Radial glow on success |
+| `FloatingParticles` | `particle-effects.tsx` | Ambient floating particles |
+| `SuccessRipple` | `particle-effects.tsx` | Ripple effect on success |
+| `WisdomCard` | `wisdom-card.tsx` | Glassmorphism wisdom reveal |
+| `GlassPanel` | `wisdom-card.tsx` | Reusable glass container |
+| `GlassButton` | `wisdom-card.tsx` | Glass-styled button |
+| `AmbientAudioControl` | `ambient-audio-control.tsx` | Audio widget with 5 soundscapes |
+| `GrowthAvatar` | `growth-avatar.tsx` | 5-stage tree evolution |
+| `GrowthAvatarMini` | `growth-avatar.tsx` | Compact avatar for headers |
+| `LockedOverlay` | `locked-overlay.tsx` | Premium feature lock overlay |
+| `LockedBadge` | `locked-overlay.tsx` | Inline "PRO" badge |
+| `LockedFeatureCard` | `locked-overlay.tsx` | Card for locked features |
+
+---
+
+### Growth Avatar System (TASK2.md Phase 2)
+
+Seed-to-Tree evolution gamification with animated SVG avatars.
+
+#### Growth Stages
+
+| Stage | Name | Points Required |
+|-------|------|-----------------|
+| 1 | Seed | 0 |
+| 2 | Sprout | 100 |
+| 3 | Sapling | 500 |
+| 4 | Young Tree | 1,500 |
+| 5 | Mature Tree | 5,000 |
+
+---
+
+### Pro-Tier Features (TASK2.md Phase 4)
+
+Subscription gating for premium features.
+
+#### Features Gated Behind PRO Tier
+
+| Feature | Route | Implementation |
+|---------|-------|----------------|
+| Daily Challenges | `/daily` | Full page locked with LockedOverlay |
+| Growth Avatar | `/profile` | Growth Journey section locked |
+
+#### UX Flow
+- Non-subscribers see glassmorphism overlay with blur effect
+- Animated lock icon with shimmer on upgrade button
+- "Upgrade to PRO" redirects to `/pricing`
+- PRO badge indicates locked sections
+- Smooth Framer Motion animations on lock/unlock
+
+---
+
+### New Hooks
+
+#### `useAmbientAudio()` - Web Audio API Soundscapes
+
+**Soundscapes:**
+- 🌧️ Gentle Rain
+- 🐦 Bird Songs
+- 💨 Soft Wind
+- 🌊 Ocean Waves
+- 🌲 Forest Ambiance
+
+**Returns:**
+- `isPlaying` - Current playback state
+- `volume` - Volume level (0-1)
+- `currentSound` - Active soundscape
+- `playSound(name)` - Start playing a sound
+- `toggle()` - Toggle play/pause
+- `setVolume(level)` - Adjust volume
+- `stopAllSounds()` - Stop all audio
+
+#### `useSubscription()` - Subscription Status
+
+**Returns:**
+- `subscription` - Full subscription object
+- `isLoading` - Loading state
+- `error` - Error state
+
+#### `useSubscriptionStatus()` - Tier Helpers
+
+**Returns:**
+- `isPro` - User has PRO or PREMIUM tier
+- `isPremium` - User has PREMIUM tier
+- `isFree` - User has FREE tier
+- `tier` - Current tier name
+- `status` - Subscription status
+
+---
+
+### New Pages
+
+| Route | Purpose | Auth Required |
+|-------|---------|---------------|
+| `/zen-demo` | Demo showcasing all Zen components | No |
+
+---
+
+### Updated Folder Structure (Zen & Growth)
+
+```
+frontend/src/
+├── components/zen/           # NEW - Premium UI components
+│   ├── index.ts
+│   ├── breathing-container.tsx
+│   ├── particle-effects.tsx
+│   ├── wisdom-card.tsx
+│   ├── ambient-audio-control.tsx
+│   ├── growth-avatar.tsx
+│   └── locked-overlay.tsx
+│
+├── hooks/
+│   ├── useAmbientAudio.ts    # NEW - Web Audio API
+│   └── use-subscription.ts   # NEW - Subscription hooks
+│
+└── app/(main)/
+    └── zen-demo/
+        └── page.tsx          # NEW - Zen demo page
+```
+
+---
+
+### Updated Pages (Subscription Gating)
+
+| Route | Changes |
+|-------|---------|
+| `/daily` | Added LockedOverlay for non-PRO users |
+| `/profile` | Added Growth Avatar section with subscription gating |
+
+---
+
+### Zen Demo Page Features (`/zen-demo`)
+
+Three demo screens showcasing the Zen experience:
+
+**Screen 1: Zen Home**
+- Breathing page transitions
+- Floating ambient particles
+- Glassmorphism cards
+- Pulsing background glow
+
+**Screen 2: Puzzle Completion**
+- Particle burst on correct answer
+- Glow burst effect
+- Success ripple animation
+- Glassmorphism Wisdom Card
+
+**Screen 3: Growth Profile**
+- Animated SVG tree avatar
+- 5 evolution stages
+- Floating leaves effect
+- Progress bar to next stage

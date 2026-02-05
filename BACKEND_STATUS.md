@@ -195,3 +195,212 @@ DATABASE_URL="postgresql://..."
 JWT_SECRET="your-jwt-secret"
 JWT_REFRESH_SECRET="your-refresh-secret"
 ```
+
+---
+
+## Session: 2026-02-05 - Subscriptions & Multiplayer Update
+
+### 8. Billing Module (NEW)
+- [x] Stripe SDK integration
+- [x] Checkout session creation (with 7-day trial)
+- [x] Billing portal session creation
+- [x] Webhook handling for subscription events
+- [x] Subscription status synchronization
+- [x] Tier-based pricing (FREE, PRO, PREMIUM)
+
+**Endpoints:**
+- `POST /api/billing/checkout-session` - Create Stripe checkout session
+- `POST /api/billing/portal-session` - Open Stripe billing portal
+- `GET /api/billing/subscription` - Get current subscription
+- `POST /api/billing/webhook` - Handle Stripe webhook events
+
+### 9. Battle Module (NEW - WebSockets)
+- [x] WebSocket Gateway with Socket.IO
+- [x] JWT authentication for WebSocket connections
+- [x] Lobby management system
+- [x] Matchmaking by difficulty level
+- [x] Real-time game state synchronization
+- [x] Progress broadcasting to opponents
+- [x] Solution validation and scoring
+- [x] Game over with results calculation
+
+**WebSocket Events (Server -> Client):**
+- `lobby_joined` - Lobby data after joining
+- `player_joined` - New player joined lobby
+- `player_left` - Player left lobby
+- `match_start` - Game starting with puzzle data
+- `opponent_progress` - Real-time opponent progress
+- `game_over` - Final results and winner
+- `battle_error` - Error notifications
+
+**WebSocket Events (Client -> Server):**
+- `join_lobby` - Join/create lobby
+- `leave_lobby` - Leave current lobby
+- `player_ready` - Toggle ready state
+- `progress_update` - Send puzzle-solving progress
+- `submit_solution` - Submit final solution
+
+---
+
+## New Database Models
+
+| Model | Purpose |
+|-------|---------|
+| Subscription | Stripe subscription data linked to User |
+
+### Subscription Model Fields
+- `stripeCustomerId` - Stripe customer ID
+- `stripeSubscriptionId` - Stripe subscription ID
+- `stripePriceId` - Price ID for the plan
+- `tier` - FREE, PRO, PREMIUM
+- `status` - ACTIVE, CANCELED, PAST_DUE, TRIALING, etc.
+- `currentPeriodStart/End` - Billing period dates
+- `trialStart/End` - Trial period dates
+- `cancelAtPeriodEnd` - Cancellation flag
+
+---
+
+## New Guards & Decorators
+
+| Guard/Decorator | Purpose |
+|-----------------|---------|
+| `SubscriptionGuard` | Protect routes by subscription tier |
+| `@RequireSubscription(tier)` | Decorator to specify required tier |
+| `WsJwtGuard` | JWT authentication for WebSocket connections |
+
+---
+
+## Protected Premium Routes
+
+| Route | Required Tier |
+|-------|---------------|
+| `GET /api/puzzles/daily` | PRO |
+
+---
+
+## Updated API Summary
+
+| Module | Endpoints |
+|--------|-----------|
+| Auth | 5 endpoints |
+| Users | 5 endpoints |
+| Progress | 7 endpoints |
+| Achievements | 8 endpoints |
+| Leaderboards | 6 endpoints |
+| Puzzles | 6 endpoints |
+| Decoder | 4 endpoints |
+| Billing (NEW) | 4 endpoints |
+| Battle (NEW) | WebSocket Gateway |
+| **Total** | **45+ endpoints** |
+
+---
+
+## New Environment Variables
+
+```env
+# Stripe Configuration
+STRIPE_SECRET_KEY="sk_test_..."
+STRIPE_WEBHOOK_SECRET="whsec_..."
+STRIPE_PRO_PRICE_ID="price_pro_monthly"
+STRIPE_PREMIUM_PRICE_ID="price_premium_monthly"
+```
+
+---
+
+## New Dependencies Added
+
+- `stripe` - Stripe SDK for payment processing
+- `@nestjs/websockets` - WebSocket support for NestJS
+- `@nestjs/platform-socket.io` - Socket.IO adapter
+- `socket.io` - Real-time bidirectional communication
+
+---
+
+## Session: 2026-02-05 - Zen & Growth Experience Update
+
+### 10. Growth System Database Updates (TASK2.md Phase 2)
+
+New fields added to User model for Growth Avatar gamification:
+
+| Field | Type | Default | Description |
+|-------|------|---------|-------------|
+| `growthPoints` | Int | 0 | Points accumulated for growth progression |
+| `growthStage` | Int | 1 | Current growth stage (1-5) |
+
+#### Growth Stages
+
+| Stage | Name | Points Required |
+|-------|------|-----------------|
+| 1 | Seed | 0 |
+| 2 | Sprout | 100 |
+| 3 | Sapling | 500 |
+| 4 | Young Tree | 1,500 |
+| 5 | Mature Tree | 5,000 |
+
+### Database Migration
+
+```
+backend/prisma/migrations/20260205011706_add_growth_points/
+└── migration.sql
+```
+
+**Migration SQL:**
+```sql
+ALTER TABLE "User" ADD COLUMN "growthPoints" INTEGER NOT NULL DEFAULT 0;
+ALTER TABLE "User" ADD COLUMN "growthStage" INTEGER NOT NULL DEFAULT 1;
+```
+
+---
+
+### Updated Prisma Schema
+
+```prisma
+model User {
+  // ... existing fields
+
+  // Growth System (NEW)
+  growthPoints Int @default(0)
+  growthStage  Int @default(1)
+
+  // Subscription relation
+  subscription Subscription?
+}
+```
+
+---
+
+### Updated API Summary (Final)
+
+| Module | Endpoints |
+|--------|-----------|
+| Auth | 5 endpoints |
+| Users | 5 endpoints |
+| Progress | 7 endpoints |
+| Achievements | 8 endpoints |
+| Leaderboards | 6 endpoints |
+| Puzzles | 6 endpoints |
+| Decoder | 4 endpoints |
+| Billing | 4 endpoints |
+| Battle | WebSocket Gateway |
+| **Total** | **45+ endpoints** |
+
+---
+
+### All Database Models
+
+| Model | Purpose |
+|-------|---------|
+| User | Authentication, profiles, stats, growth |
+| Puzzle | Game content with encrypted patterns |
+| UserProgress | Puzzle completion tracking |
+| Achievement | Gamification definitions |
+| UserAchievement | Unlocked achievements |
+| Subscription | Stripe subscription data |
+
+---
+
+### Build Status
+
+- ✅ Backend: PASSING
+- ✅ Database: Migrated (including growth fields)
+- ✅ Prisma Client: Generated

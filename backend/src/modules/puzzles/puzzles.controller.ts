@@ -10,6 +10,7 @@ import {
   HttpCode,
   HttpStatus,
   UsePipes,
+  UseGuards,
 } from '@nestjs/common';
 import {
   ApiTags,
@@ -18,6 +19,8 @@ import {
   ApiParam,
   ApiBearerAuth,
 } from '@nestjs/swagger';
+import { SubscriptionTier } from '@prisma/client';
+import { JwtAuthGuard, SubscriptionGuard, RequireSubscription } from '../../common/guards';
 import { ZodValidationPipe } from 'nestjs-zod';
 import { PuzzlesService } from './puzzles.service';
 import { DecoderService } from './decoder.service';
@@ -91,10 +94,17 @@ export class PuzzlesController {
   }
 
   @Get('daily')
-  @ApiOperation({ summary: "Get today's daily puzzle" })
+  @UseGuards(JwtAuthGuard, SubscriptionGuard)
+  @RequireSubscription(SubscriptionTier.PRO)
+  @ApiBearerAuth()
+  @ApiOperation({ summary: "Get today's daily puzzle (PRO subscription required)" })
   @ApiResponse({
     status: 200,
     description: "Returns today's daily puzzle or null if not available",
+  })
+  @ApiResponse({
+    status: 403,
+    description: 'PRO subscription required',
   })
   async findDaily(): Promise<ApiResponseDto<Puzzle | null>> {
     const puzzle = await this.puzzlesService.findDailyPuzzle();

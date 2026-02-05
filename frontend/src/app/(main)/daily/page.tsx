@@ -2,15 +2,18 @@
 
 import * as React from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { motion } from "framer-motion";
 import { Calendar, Flame, Clock, ChevronRight, CheckCircle2, History } from "lucide-react";
-import { useDailyPuzzle, usePuzzles, useUserProgress } from "@/hooks";
+import { useDailyPuzzle, usePuzzles, useUserProgress, useSubscriptionStatus } from "@/hooks";
 import { useAuthStore } from "@/stores";
 import { PageHeader } from "@/components/layout";
 import { Card, CardHeader, CardTitle, CardContent, Button, Badge, Skeleton, Progress } from "@/components/ui";
+import { LockedOverlay } from "@/components/zen";
 import { cn } from "@/lib/utils";
 
 export default function DailyPage() {
+  const router = useRouter();
   const { user } = useAuthStore();
   const { data: dailyPuzzle, isLoading: dailyLoading } = useDailyPuzzle();
   const { data: puzzlesData, isLoading: puzzlesLoading } = usePuzzles({
@@ -18,6 +21,11 @@ export default function DailyPage() {
     limit: 7, // Last 7 daily puzzles
   });
   const { data: progressData } = useUserProgress();
+  const { isPro, isLoading: subscriptionLoading } = useSubscriptionStatus();
+
+  const handleUpgradeClick = () => {
+    router.push('/pricing');
+  };
 
   // Check if today's puzzle is completed
   const todayCompleted = React.useMemo(() => {
@@ -115,10 +123,17 @@ export default function DailyPage() {
         </motion.div>
       )}
 
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        {/* Today's Puzzle - Main Card */}
-        <div className="lg:col-span-2">
-          {dailyLoading ? (
+      <LockedOverlay
+        isLocked={!isPro && !subscriptionLoading}
+        featureName="Daily Challenges"
+        requiredTier="PRO"
+        onUpgradeClick={handleUpgradeClick}
+        blur={true}
+      >
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+          {/* Today's Puzzle - Main Card */}
+          <div className="lg:col-span-2">
+            {dailyLoading ? (
             <Skeleton className="h-96" />
           ) : dailyPuzzle?.data ? (
             <Card variant="elevated" glow="gold" className="overflow-hidden">
@@ -304,6 +319,7 @@ export default function DailyPage() {
           </Card>
         </div>
       </div>
+      </LockedOverlay>
     </motion.div>
   );
 }

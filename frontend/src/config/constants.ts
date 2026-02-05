@@ -50,4 +50,12 @@ export const ROUTES = {
   SETTINGS: '/settings',
   LEADERBOARDS: '/leaderboards',
   ACHIEVEMENTS: '/achievements',
+  PRICING: '/pricing',
+  SUBSCRIPTION: '/subscription',
+  BATTLE: '/battle',
+} as const;
+
+export const STRIPE_CONFIG = {
+  PRO_PRICE_ID: process.env.NEXT_PUBLIC_STRIPE_PRO_PRICE_ID || 'price_pro_monthly',
+  PREMIUM_PRICE_ID: process.env.NEXT_PUBLIC_STRIPE_PREMIUM_PRICE_ID || 'price_premium_monthly',
 } as const;

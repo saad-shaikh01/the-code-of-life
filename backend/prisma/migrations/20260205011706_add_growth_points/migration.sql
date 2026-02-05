@@ -1,0 +1,3 @@
+-- AlterTable
+ALTER TABLE "User" ADD COLUMN     "growthPoints" INTEGER NOT NULL DEFAULT 0,
+ADD COLUMN     "growthStage" INTEGER NOT NULL DEFAULT 1;

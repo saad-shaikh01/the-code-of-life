@@ -15,6 +15,7 @@ import {
   ChevronLeft,
   ChevronRight,
   LayoutDashboard,
+  CreditCard,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useAuthStore } from "@/stores";
@@ -24,10 +25,12 @@ const sidebarLinks = [
   { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
   { href: "/story", label: "Story Mode", icon: BookOpen },
   { href: "/challenge", label: "Challenge", icon: Swords },
+  { href: "/battle", label: "Battle Mode", icon: Swords },
   { href: "/daily", label: "Daily Puzzle", icon: Calendar },
   { href: "/leaderboards", label: "Leaderboards", icon: Trophy },
   { href: "/achievements", label: "Achievements", icon: Award },
   { href: "/profile", label: "Profile", icon: User },
+  { href: "/subscription", label: "Subscription", icon: CreditCard },
   { href: "/settings", label: "Settings", icon: Settings },
 ];
 
