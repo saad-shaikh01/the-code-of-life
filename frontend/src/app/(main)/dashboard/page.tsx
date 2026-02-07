@@ -15,6 +15,9 @@ import {
   Star,
   Target,
   TrendingUp,
+  Lock,
+  CheckCircle2,
+  Sparkles,
 } from "lucide-react";
 import { useAuthStore } from "@/stores";
 import { useDailyPuzzle, useUserProgress, useUserAchievements } from "@/hooks";
@@ -155,15 +158,56 @@ export default function DashboardPage() {
                     </Link>
                   </>
                 ) : (
-                  <div className="text-center py-8">
-                    <p className="text-muted-foreground mb-4">
-                      No daily puzzle available today. Check back tomorrow!
-                    </p>
-                    <Link href="/challenge">
-                      <Button variant="secondary">
-                        Try Challenge Mode
-                      </Button>
-                    </Link>
+                  <div className="text-center py-12">
+                    <div className="max-w-md mx-auto">
+                      <motion.div
+                        initial={{ scale: 0.95, opacity: 0 }}
+                        animate={{ scale: 1, opacity: 1 }}
+                        className="relative overflow-hidden rounded-2xl border border-amber-500/20 bg-gradient-to-br from-amber-500/10 to-purple-500/10 backdrop-blur-sm p-8"
+                      >
+                        {/* Glow effects */}
+                        <div className="absolute -top-20 -right-20 w-40 h-40 bg-amber-500/20 rounded-full blur-3xl" />
+                        <div className="absolute -bottom-20 -left-20 w-40 h-40 bg-purple-500/20 rounded-full blur-3xl" />
+
+                        <div className="relative z-10">
+                          <div className="inline-flex p-4 rounded-2xl bg-gradient-to-br from-amber-500/20 to-purple-500/20 mb-4">
+                            <Lock className="h-8 w-8 text-amber-400" />
+                          </div>
+
+                          <h3 className="text-xl font-bold mb-2">Unlock Daily Puzzles</h3>
+                          <p className="text-muted-foreground mb-6">
+                            Upgrade to PRO to access daily challenges and maintain your streak!
+                          </p>
+
+                          {/* Benefits */}
+                          <div className="space-y-2 mb-6 text-left">
+                            {[
+                              'Unlimited daily puzzles',
+                              'Priority hints system',
+                              'Track your streak',
+                              '7-day free trial'
+                            ].map((benefit, i) => (
+                              <div key={i} className="flex items-center gap-2">
+                                <CheckCircle2 className="h-4 w-4 text-emerald-400" />
+                                <span className="text-sm text-foreground">{benefit}</span>
+                              </div>
+                            ))}
+                          </div>
+
+                          <Link href="/pricing">
+                            <Button className="w-full group">
+                              <Sparkles className="h-4 w-4 mr-2" />
+                              Upgrade to PRO
+                              <ChevronRight className="h-4 w-4 ml-2 group-hover:translate-x-1 transition-transform" />
+                            </Button>
+                          </Link>
+
+                          <p className="text-xs text-muted-foreground mt-4">
+                            Starting at $9.99/month
+                          </p>
+                        </div>
+                      </motion.div>
+                    </div>
                   </div>
                 )}
               </div>

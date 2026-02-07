@@ -12,7 +12,7 @@ import { cn } from "@/lib/utils";
 
 export default function LoginPage() {
   const router = useRouter();
-  const { login, isLoading, error, clearError } = useAuthStore();
+  const { login, isLoading, error, clearError, isAuthenticated, user } = useAuthStore();
   const { addToast } = useToast();
 
   const [email, setEmail] = React.useState("");
@@ -27,6 +27,12 @@ export default function LoginPage() {
   React.useEffect(() => {
     clearError();
   }, [clearError]);
+
+  React.useEffect(() => {
+    if (isAuthenticated && user) {
+      router.push('/dashboard');
+    }
+  }, [isAuthenticated, user, router]);
 
   const validateForm = () => {
     const errors: { email?: string; password?: string } = {};

@@ -112,30 +112,21 @@ export class ProgressService {
     // Level up every 5 puzzles
     const newLevel = Math.floor(completedCount / 5) + 1;
 
-    // Update streak
+    // Update streak (24-hour based)
     const now = new Date();
-    const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
     let newStreakDays = user.streakDays;
 
     if (user.lastPlayedAt) {
       const lastPlayed = new Date(user.lastPlayedAt);
-      const lastPlayedDate = new Date(
-        lastPlayed.getFullYear(),
-        lastPlayed.getMonth(),
-        lastPlayed.getDate(),
-      );
+      const elapsedHours = (now.getTime() - lastPlayed.getTime()) / (1000 * 60 * 60);
 
-      const diffDays = Math.floor(
-        (today.getTime() - lastPlayedDate.getTime()) / (1000 * 60 * 60 * 24),
-      );
-
-      if (diffDays === 1) {
-        newStreakDays = user.streakDays + 1;
-      } else if (diffDays > 1) {
-        newStreakDays = 1;
+      if (elapsedHours > 24) {
+        newStreakDays = 1;  // Reset if >24h elapsed
+      } else {
+        newStreakDays = user.streakDays + 1;  // Increment within 24h
       }
     } else {
-      newStreakDays = 1;
+      newStreakDays = 1;  // First play
     }
 
     await this.prisma.user.update({
