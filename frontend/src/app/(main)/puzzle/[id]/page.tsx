@@ -11,7 +11,6 @@ import {
   RotateCcw,
   Trophy,
   X,
-  ChevronRight,
   Sparkles,
   ArrowLeft,
 } from "lucide-react";
@@ -22,8 +21,6 @@ import { useToast } from "@/components/ui/toast";
 import { PageHeader } from "@/components/layout";
 import {
   Card,
-  CardHeader,
-  CardTitle,
   CardContent,
   Button,
   Input,
@@ -37,8 +34,9 @@ import {
   DialogDescription,
   DialogFooter,
 } from "@/components/ui";
-import { cn } from "@/lib/utils";
+import { tokenizeEncryptedPattern } from "@/lib/cipher";
 import { GAME_CONFIG } from "@/config/constants";
+import { CipherTokenCell } from "@/modules/puzzles/components/CipherTokenCell";
 
 export default function PuzzlePage() {
   const params = useParams();
@@ -62,12 +60,11 @@ export default function PuzzlePage() {
     similarity,
     setPuzzle,
     setUserInput,
-    useHint,
+    useHint: revealHint,
     startTimer,
     updateElapsedTime,
     setCompleted,
     calculateScore,
-    resetGame,
   } = useGameStore();
 
   // Local state
@@ -100,7 +97,7 @@ export default function PuzzlePage() {
 
   // Handle hint request
   const handleUseHint = () => {
-    const hint = useHint();
+    const hint = revealHint();
     if (hint) {
       addToast({
         type: "info",
@@ -151,7 +148,7 @@ export default function PuzzlePage() {
           hintsUsed,
         });
       }
-    } catch (error) {
+    } catch {
       addToast({
         type: "error",
         title: "Submission Failed",
@@ -191,7 +188,7 @@ export default function PuzzlePage() {
     return (
       <div className="text-center py-20">
         <h2 className="text-xl font-semibold text-foreground mb-2">Puzzle Not Found</h2>
-        <p className="text-muted-foreground mb-4">This puzzle doesn't exist or has been removed.</p>
+        <p className="text-muted-foreground mb-4">This puzzle doesn&apos;t exist or has been removed.</p>
         <Button onClick={() => router.back()}>
           <ArrowLeft className="h-4 w-4 mr-2" />
           Go Back
@@ -201,6 +198,7 @@ export default function PuzzlePage() {
   }
 
   const puzzle = currentPuzzle;
+  const encryptedTokens = tokenizeEncryptedPattern(puzzle.encryptedPattern);
   const availableHints = Math.min(GAME_CONFIG.HINTS_PER_PUZZLE, puzzle.hints.length) - hintsUsed;
 
   return (
@@ -258,18 +256,28 @@ export default function PuzzlePage() {
               <p className="text-sm text-muted-foreground mb-4 uppercase tracking-wide">
                 Decode this message
               </p>
-              <div className="flex flex-wrap justify-center gap-3 text-4xl md:text-5xl lg:text-6xl font-mono py-6">
-                {puzzle.encryptedPattern.split("").map((char, i) => (
-                  <motion.span
-                    key={i}
-                    initial={{ opacity: 0, scale: 0 }}
-                    animate={{ opacity: 1, scale: 1 }}
-                    transition={{ delay: i * 0.02, type: "spring" }}
-                    className={char === " " ? "w-4" : "symbol-gold animate-glow-pulse"}
-                  >
-                    {char}
-                  </motion.span>
-                ))}
+              <div className="flex flex-wrap justify-center gap-3 py-6">
+                {encryptedTokens.map((token, i) =>
+                  token === "" ? (
+                    <CipherTokenCell
+                      key={`gap-${i}`}
+                      token={token}
+                      gapClassName="w-4 md:w-6"
+                    />
+                  ) : (
+                    <motion.div
+                      key={`${token}-${i}`}
+                      initial={{ opacity: 0, scale: 0 }}
+                      animate={{ opacity: 1, scale: 1 }}
+                      transition={{ delay: i * 0.02, type: "spring" }}
+                    >
+                      <CipherTokenCell
+                        token={token}
+                        className="min-w-[2.75rem] px-3 py-2 text-lg md:min-w-[3.25rem] md:text-2xl lg:min-w-[3.75rem] lg:text-3xl animate-glow-pulse"
+                      />
+                    </motion.div>
+                  )
+                )}
               </div>
             </div>
 
@@ -407,7 +415,7 @@ export default function PuzzlePage() {
                 {/* Original message revealed */}
                 <div className="p-4 rounded-xl bg-violet-500/10 border border-violet-500/20 mb-6">
                   <p className="text-sm text-muted-foreground mb-2">The wisdom revealed:</p>
-                  <p className="text-foreground italic">"{puzzle.originalReflection}"</p>
+                  <p className="text-foreground italic">&ldquo;{puzzle.originalReflection}&rdquo;</p>
                 </div>
 
                 <div className="flex gap-3">

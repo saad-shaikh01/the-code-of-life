@@ -18,6 +18,8 @@ interface AuthState {
   isAuthenticated: boolean;
   isLoading: boolean;
   error: string | null;
+  hasHydrated: boolean;
+  isAuthReady: boolean;
 
   // Actions
   login: (credentials: LoginInput) => Promise<void>;
@@ -26,6 +28,8 @@ interface AuthState {
   refreshUser: () => Promise<void>;
   clearError: () => void;
   setUser: (user: User) => void;
+  setHasHydrated: (value: boolean) => void;
+  setAuthReady: (value: boolean) => void;
 }
 
 export const useAuthStore = create<AuthState>()(
@@ -36,6 +40,8 @@ export const useAuthStore = create<AuthState>()(
       isAuthenticated: false,
       isLoading: false,
       error: null,
+      hasHydrated: false,
+      isAuthReady: false,
 
       // Login action
       login: async (credentials) => {
@@ -51,6 +57,7 @@ export const useAuthStore = create<AuthState>()(
             user,
             isAuthenticated: true,
             isLoading: false,
+            isAuthReady: true,
           });
         } catch (error) {
           set({
@@ -75,6 +82,7 @@ export const useAuthStore = create<AuthState>()(
             user,
             isAuthenticated: true,
             isLoading: false,
+            isAuthReady: true,
           });
         } catch (error) {
           set({
@@ -91,21 +99,37 @@ export const useAuthStore = create<AuthState>()(
         set({
           user: null,
           isAuthenticated: false,
+          isLoading: false,
           error: null,
+          isAuthReady: true,
         });
       },
 
       // Refresh user data
       refreshUser: async () => {
-        const { isAuthenticated } = get();
-        if (!isAuthenticated) return;
+        if (!apiClient.hasStoredSession()) {
+          set({
+            user: null,
+            isAuthenticated: false,
+            isLoading: false,
+          });
+          return;
+        }
+
+        set({ isLoading: true, error: null });
 
         try {
           const response = await authService.me();
-          set({ user: response.data });
+          set({
+            user: response.data,
+            isAuthenticated: true,
+            isLoading: false,
+          });
         } catch {
           // Token might be invalid, logout
           get().logout();
+        } finally {
+          set({ isLoading: false });
         }
       },
 
@@ -114,6 +138,10 @@ export const useAuthStore = create<AuthState>()(
 
       // Set user (for external updates)
       setUser: (user) => set({ user }),
+
+      setHasHydrated: (value) => set({ hasHydrated: value }),
+
+      setAuthReady: (value) => set({ isAuthReady: value }),
     }),
     {
       name: AUTH_CONFIG.USER_KEY,
@@ -121,6 +149,17 @@ export const useAuthStore = create<AuthState>()(
         user: state.user,
         isAuthenticated: state.isAuthenticated,
       }),
+      onRehydrateStorage: () => (state, error) => {
+        if (!error && !apiClient.hasStoredSession()) {
+          state?.logout();
+        }
+
+        state?.setHasHydrated(true);
+
+        if (error || !apiClient.hasStoredSession()) {
+          state?.setAuthReady(true);
+        }
+      },
     }
   )
 );

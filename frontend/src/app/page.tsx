@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { motion } from "framer-motion";
 import { BookOpen, Swords, Calendar, Trophy, Star, ChevronRight, Sparkles } from "lucide-react";
+import { LandingAuthActions } from "@/components/layout/landing-auth-actions";
 import { Button, Card } from "@/components/ui";
 import { cn } from "@/lib/utils";
 
@@ -65,14 +66,7 @@ export default function HomePage() {
           </div>
           <span className="font-bold text-xl text-gradient-gold">Code of Life</span>
         </div>
-        <div className="flex items-center gap-4">
-          <Link href="/login">
-            <Button variant="ghost">Sign In</Button>
-          </Link>
-          <Link href="/register">
-            <Button variant="primary">Get Started</Button>
-          </Link>
-        </div>
+        <LandingAuthActions />
       </nav>
 
       {/* Hero Section */}

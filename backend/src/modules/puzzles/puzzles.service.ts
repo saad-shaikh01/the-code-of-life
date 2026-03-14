@@ -1,10 +1,7 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../../prisma';
 import { Puzzle, Prisma } from '@prisma/client';
-import {
-  CreatePuzzleInput,
-  UpdatePuzzleInput,
-} from './schemas/puzzle.schema';
+import { CreatePuzzleInput, UpdatePuzzleInput } from './schemas/puzzle.schema';
 import { PuzzleQueryInput } from './schemas/puzzle-query.schema';
 
 @Injectable()
@@ -86,16 +83,15 @@ export class PuzzlesService {
 
   /**
    * Fallback: Select a puzzle deterministically based on date.
-   * This ensures the same puzzle is shown all day without needing scheduling.
+   * This ensures the same DAILY puzzle is shown all day without needing scheduling.
    */
-  private async getDeterministicDailyPuzzle(date: Date): Promise<Puzzle | null> {
-    // Get all available puzzles (prefer DAILY, fallback to STORY)
+  private async getDeterministicDailyPuzzle(
+    date: Date,
+  ): Promise<Puzzle | null> {
+    // Only rotate through DAILY puzzles so the entitlement always resolves to a daily challenge.
     const availablePuzzles = await this.prisma.puzzle.findMany({
       where: {
-        OR: [
-          { gameMode: 'DAILY', scheduledDate: null },
-          { gameMode: 'STORY' },
-        ],
+        gameMode: 'DAILY',
       },
       orderBy: { orderIndex: 'asc' },
     });

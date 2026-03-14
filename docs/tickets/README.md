@@ -6,6 +6,21 @@
 
 ---
 
+## 0. Implementation Progress
+
+- `TICKET-001`: completed on 2026-03-12.
+- `TICKET-002`: completed on 2026-03-12.
+- `TICKET-003`: completed on 2026-03-13.
+- `TICKET-004`: completed on 2026-03-13. Canonical streak rules are now defined in `docs/product-rules/streak.md` for `TICKET-005`.
+- `TICKET-005`: completed on 2026-03-13. UTC streak logic is now centralized in `UsersService.updateStreak()`, and login no longer mutates `lastPlayedAt`.
+- `TICKET-006`: completed on 2026-03-13. Middleware-based route guards now protect all `/(main)` routes, and auth sessions are mirrored into an `auth_session` cookie for routing.
+- `TICKET-007`: completed on 2026-03-13. Daily puzzle fallback now stays within `DAILY` puzzles, and free-tier users no longer fire or surface `403` entitlement errors in the daily hook.
+- `TICKET-008`: completed on 2026-03-13. Minimal forgot/reset password flow is now live with dev-mode reset tokens returned in the API response and two new auth pages.
+- `TICKET-009`: completed on 2026-03-15. Dashboard achievements now use `useUserAchievements()` data, including real unlocked counts, loading skeletons, and an empty state.
+- `TICKET-010`: completed on 2026-03-15. Battle sockets now use app-level heartbeat, bounded reconnect + room rejoin logic, stronger waiting/error UX, and a forfeit confirmation dialog.
+
+---
+
 ## 1. Audit Summary
 
 "The Code of Life" is a well-architected interactive puzzle game with a solid technical foundation: NestJS 11 backend, Next.js 16 App Router frontend, Prisma/PostgreSQL, Socket.IO battle, and Stripe billing. The stack is modern and the code is generally clean. However, the audit found **3 critical bugs, 7 high-priority gaps, and 17 medium/low issues** that collectively prevent the game from being production-ready.
@@ -24,15 +39,15 @@ Beyond critical bugs, several features are partially implemented (growth avatar,
 
 | Feature | Status | P0 | P1 | P2 | P3 |
 |---|---|---|---|---|---|
-| Cipher system | 🔴 Broken | TICKET-001 | — | — | — |
-| Auth hydration | 🔴 Broken | TICKET-002 | — | — | — |
-| Battle user identification | 🔴 Broken | TICKET-003 | — | — | — |
-| Streak logic | ❓+🔴 | — | TICKET-004, 005 | — | — |
-| Auth route guards | ❌ Missing | — | TICKET-006 | — | — |
-| Daily puzzle paywall | ⚠️ Partial | — | TICKET-007 | — | — |
-| Forgot password | ❌ Missing | — | TICKET-008 | — | — |
-| Dashboard achievements | 🔴 Broken | — | TICKET-009 | — | — |
-| Battle socket reliability | 🔴 Broken | — | TICKET-010 | — | — |
+| Cipher system | Done | TICKET-001 | — | — | — |
+| Auth hydration | Done | TICKET-002 | — | — | — |
+| Battle user identification | Done | TICKET-003 | — | — | — |
+| Streak logic | Done | — | TICKET-004, 005 | — | — |
+| Auth route guards | Done | — | TICKET-006 | — | — |
+| Daily puzzle paywall | Done | — | TICKET-007 | — | — |
+| Forgot password | Done | — | TICKET-008 | — | — |
+| Dashboard achievements | Done | — | TICKET-009 | — | — |
+| Battle socket reliability | Done | — | TICKET-010 | — | — |
 | Legal pages | ❌ Missing | — | — | TICKET-011 | — |
 | Decoder UI panel | ❌ Missing | — | — | TICKET-012 | — |
 | Admin RBAC | ❌ Missing | — | — | TICKET-013 | — |

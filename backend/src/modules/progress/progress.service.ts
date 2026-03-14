@@ -2,6 +2,7 @@ import { Injectable, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../../prisma';
 import { SubmitProgressInput } from '@code-of-life/shared';
 import { UserProgress, Puzzle } from '@prisma/client';
+import { UsersService } from '../users';
 
 export interface ProgressWithPuzzle extends UserProgress {
   puzzle: Puzzle;
@@ -16,7 +17,10 @@ export interface GameModeProgress {
 
 @Injectable()
 export class ProgressService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly usersService: UsersService,
+  ) {}
 
   async submitProgress(
     userId: string,
@@ -97,8 +101,6 @@ export class ProgressService {
       select: {
         totalScore: true,
         currentLevel: true,
-        lastPlayedAt: true,
-        streakDays: true,
       },
     });
 
@@ -112,32 +114,15 @@ export class ProgressService {
     // Level up every 5 puzzles
     const newLevel = Math.floor(completedCount / 5) + 1;
 
-    // Update streak (24-hour based)
-    const now = new Date();
-    let newStreakDays = user.streakDays;
-
-    if (user.lastPlayedAt) {
-      const lastPlayed = new Date(user.lastPlayedAt);
-      const elapsedHours = (now.getTime() - lastPlayed.getTime()) / (1000 * 60 * 60);
-
-      if (elapsedHours > 24) {
-        newStreakDays = 1;  // Reset if >24h elapsed
-      } else {
-        newStreakDays = user.streakDays + 1;  // Increment within 24h
-      }
-    } else {
-      newStreakDays = 1;  // First play
-    }
-
     await this.prisma.user.update({
       where: { id: userId },
       data: {
         totalScore: user.totalScore + score,
         currentLevel: Math.max(user.currentLevel, newLevel),
-        lastPlayedAt: now,
-        streakDays: newStreakDays,
       },
     });
+
+    await this.usersService.updateStreak(userId);
   }
 
   async getUserProgress(userId: string): Promise<ProgressWithPuzzle[]> {

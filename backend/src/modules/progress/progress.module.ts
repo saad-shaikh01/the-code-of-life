@@ -1,8 +1,10 @@
 import { Module } from '@nestjs/common';
 import { ProgressController } from './progress.controller';
 import { ProgressService } from './progress.service';
+import { UsersModule } from '../users';
 
 @Module({
+  imports: [UsersModule],
   controllers: [ProgressController],
   providers: [ProgressService],
   exports: [ProgressService],

@@ -4,11 +4,18 @@ import {
   UnauthorizedException,
   BadRequestException,
 } from '@nestjs/common';
+import * as crypto from 'crypto';
 import { JwtService } from '@nestjs/jwt';
 import { ConfigService } from '@nestjs/config';
 import * as bcrypt from 'bcrypt';
 import { PrismaService } from '../../prisma';
-import { RegisterInput, LoginInput, ChangePasswordInput } from '@code-of-life/shared';
+import {
+  RegisterInput,
+  LoginInput,
+  ChangePasswordInput,
+  ForgotPasswordInput,
+  ResetPasswordInput,
+} from '@code-of-life/shared';
 
 export interface AuthTokens {
   accessToken: string;
@@ -28,9 +35,19 @@ export interface AuthResponse {
   tokens: AuthTokens;
 }
 
+export interface ForgotPasswordResponse {
+  token: string | null;
+}
+
+interface RefreshTokenPayload {
+  sub: string;
+}
+
 @Injectable()
 export class AuthService {
   private readonly saltRounds = 12;
+  private readonly passwordResetTokenRounds = 10;
+  private readonly passwordResetExpiryMs = 60 * 60 * 1000;
 
   constructor(
     private readonly prisma: PrismaService,
@@ -77,7 +94,11 @@ export class AuthService {
     });
 
     // Generate tokens
-    const tokens = await this.generateTokens(user.id, user.email, user.username);
+    const tokens = await this.generateTokens(
+      user.id,
+      user.email,
+      user.username,
+    );
 
     return { user, tokens };
   }
@@ -98,14 +119,12 @@ export class AuthService {
       throw new UnauthorizedException('Invalid email or password');
     }
 
-    // Update last played timestamp
-    await this.prisma.user.update({
-      where: { id: user.id },
-      data: { lastPlayedAt: new Date() },
-    });
-
     // Generate tokens
-    const tokens = await this.generateTokens(user.id, user.email, user.username);
+    const tokens = await this.generateTokens(
+      user.id,
+      user.email,
+      user.username,
+    );
 
     return {
       user: {
@@ -123,9 +142,14 @@ export class AuthService {
 
   async refreshTokens(refreshToken: string): Promise<AuthTokens> {
     try {
-      const payload = this.jwtService.verify(refreshToken, {
-        secret: this.configService.get<string>('JWT_REFRESH_SECRET') || 'refresh-secret',
-      });
+      const payload = this.jwtService.verify<RefreshTokenPayload>(
+        refreshToken,
+        {
+          secret:
+            this.configService.get<string>('JWT_REFRESH_SECRET') ||
+            'refresh-secret',
+        },
+      );
 
       const user = await this.prisma.user.findUnique({
         where: { id: payload.sub },
@@ -142,7 +166,10 @@ export class AuthService {
     }
   }
 
-  async changePassword(userId: string, input: ChangePasswordInput): Promise<void> {
+  async changePassword(
+    userId: string,
+    input: ChangePasswordInput,
+  ): Promise<void> {
     const user = await this.prisma.user.findUnique({
       where: { id: userId },
     });
@@ -152,19 +179,111 @@ export class AuthService {
     }
 
     // Verify current password
-    const isPasswordValid = await bcrypt.compare(input.currentPassword, user.password);
+    const isPasswordValid = await bcrypt.compare(
+      input.currentPassword,
+      user.password,
+    );
     if (!isPasswordValid) {
       throw new BadRequestException('Current password is incorrect');
     }
 
     // Hash new password
-    const hashedPassword = await bcrypt.hash(input.newPassword, this.saltRounds);
+    const hashedPassword = await bcrypt.hash(
+      input.newPassword,
+      this.saltRounds,
+    );
 
     // Update password
     await this.prisma.user.update({
       where: { id: userId },
       data: { password: hashedPassword },
     });
+  }
+
+  async forgotPassword(
+    input: ForgotPasswordInput,
+  ): Promise<ForgotPasswordResponse> {
+    const user = await this.prisma.user.findUnique({
+      where: { email: input.email },
+      select: { id: true, email: true },
+    });
+
+    if (!user) {
+      return { token: null };
+    }
+
+    const token = crypto.randomBytes(32).toString('hex');
+    const passwordResetToken = await bcrypt.hash(
+      token,
+      this.passwordResetTokenRounds,
+    );
+    const passwordResetExpiry = new Date(
+      Date.now() + this.passwordResetExpiryMs,
+    );
+
+    await this.prisma.user.update({
+      where: { id: user.id },
+      data: {
+        passwordResetToken,
+        passwordResetExpiry,
+      },
+    });
+
+    if (this.isDevMode()) {
+      const frontendUrl =
+        this.configService.get<string>('FRONTEND_URL') ||
+        'http://localhost:3000';
+      const resetUrl = `${frontendUrl}/reset-password?token=${token}`;
+
+      console.log(`Password reset link for ${user.email}: ${resetUrl}`);
+
+      return { token };
+    }
+
+    return { token: null };
+  }
+
+  async resetPassword(input: ResetPasswordInput): Promise<void> {
+    const candidates = await this.prisma.user.findMany({
+      where: {
+        passwordResetToken: { not: null },
+        passwordResetExpiry: { gt: new Date() },
+      },
+      select: {
+        id: true,
+        passwordResetToken: true,
+      },
+    });
+
+    for (const candidate of candidates) {
+      if (!candidate.passwordResetToken) {
+        continue;
+      }
+
+      const isValidToken = await bcrypt.compare(
+        input.token,
+        candidate.passwordResetToken,
+      );
+
+      if (!isValidToken) {
+        continue;
+      }
+
+      const password = await bcrypt.hash(input.newPassword, this.saltRounds);
+
+      await this.prisma.user.update({
+        where: { id: candidate.id },
+        data: {
+          password,
+          passwordResetToken: null,
+          passwordResetExpiry: null,
+        },
+      });
+
+      return;
+    }
+
+    throw new UnauthorizedException('Invalid or expired reset link');
   }
 
   async validateUser(userId: string) {
@@ -193,15 +312,23 @@ export class AuthService {
 
     const [accessToken, refreshToken] = await Promise.all([
       this.jwtService.signAsync(payload, {
-        secret: this.configService.get<string>('JWT_SECRET') || 'default-secret-change-in-production',
+        secret:
+          this.configService.get<string>('JWT_SECRET') ||
+          'default-secret-change-in-production',
         expiresIn: '15m',
       }),
       this.jwtService.signAsync(payload, {
-        secret: this.configService.get<string>('JWT_REFRESH_SECRET') || 'refresh-secret',
+        secret:
+          this.configService.get<string>('JWT_REFRESH_SECRET') ||
+          'refresh-secret',
         expiresIn: '7d',
       }),
     ]);
 
     return { accessToken, refreshToken };
+  }
+
+  private isDevMode(): boolean {
+    return this.configService.get<string>('NODE_ENV') !== 'production';
   }
 }

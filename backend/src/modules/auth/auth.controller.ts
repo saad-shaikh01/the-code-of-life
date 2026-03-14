@@ -14,16 +14,26 @@ import {
   ApiBearerAuth,
 } from '@nestjs/swagger';
 import { createZodDto } from 'nestjs-zod';
-import { AuthService, AuthResponse, AuthTokens } from './auth.service';
+import {
+  AuthService,
+  AuthResponse,
+  AuthTokens,
+  ForgotPasswordResponse,
+} from './auth.service';
 import {
   registerSchema,
   loginSchema,
   refreshTokenSchema,
   changePasswordSchema,
+  forgotPasswordSchema,
+  resetPasswordSchema,
 } from '@code-of-life/shared';
 import { ApiResponseDto } from '../../common/dto';
 import { Public } from '../../common/decorators';
-import { CurrentUser, CurrentUserType } from '../../common/decorators/current-user.decorator';
+import {
+  CurrentUser,
+  CurrentUserType,
+} from '../../common/decorators/current-user.decorator';
 import { JwtAuthGuard } from '../../common/guards';
 
 // DTOs for Swagger
@@ -31,6 +41,8 @@ class RegisterDto extends createZodDto(registerSchema) {}
 class LoginDto extends createZodDto(loginSchema) {}
 class RefreshTokenDto extends createZodDto(refreshTokenSchema) {}
 class ChangePasswordDto extends createZodDto(changePasswordSchema) {}
+class ForgotPasswordDto extends createZodDto(forgotPasswordSchema) {}
+class ResetPasswordDto extends createZodDto(resetPasswordSchema) {}
 
 @ApiTags('auth')
 @Controller('auth')
@@ -58,7 +70,9 @@ export class AuthController {
   @ApiOperation({ summary: 'Login with email and password' })
   @ApiResponse({ status: 200, description: 'Login successful' })
   @ApiResponse({ status: 401, description: 'Invalid credentials' })
-  async login(@Body() loginDto: LoginDto): Promise<ApiResponseDto<AuthResponse>> {
+  async login(
+    @Body() loginDto: LoginDto,
+  ): Promise<ApiResponseDto<AuthResponse>> {
     const result = await this.authService.login(loginDto);
     return ApiResponseDto.success(result, 'Login successful');
   }
@@ -72,8 +86,42 @@ export class AuthController {
   async refreshTokens(
     @Body() refreshDto: RefreshTokenDto,
   ): Promise<ApiResponseDto<AuthTokens>> {
-    const tokens = await this.authService.refreshTokens(refreshDto.refreshToken);
+    const tokens = await this.authService.refreshTokens(
+      refreshDto.refreshToken,
+    );
     return ApiResponseDto.success(tokens, 'Token refreshed successfully');
+  }
+
+  @Post('forgot-password')
+  @Public()
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: 'Request a password reset token' })
+  @ApiResponse({
+    status: 200,
+    description:
+      'Returns a generic success response and includes the reset token in dev mode',
+  })
+  async forgotPassword(
+    @Body() forgotPasswordDto: ForgotPasswordDto,
+  ): Promise<ApiResponseDto<ForgotPasswordResponse>> {
+    const result = await this.authService.forgotPassword(forgotPasswordDto);
+    return ApiResponseDto.success(
+      result,
+      'If an account exists with that email, a reset link has been generated.',
+    );
+  }
+
+  @Post('reset-password')
+  @Public()
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: 'Reset password using a valid reset token' })
+  @ApiResponse({ status: 200, description: 'Password reset successfully' })
+  @ApiResponse({ status: 401, description: 'Invalid or expired reset token' })
+  async resetPassword(
+    @Body() resetPasswordDto: ResetPasswordDto,
+  ): Promise<ApiResponseDto<null>> {
+    await this.authService.resetPassword(resetPasswordDto);
+    return ApiResponseDto.success(null, 'Password reset successfully');
   }
 
   @Post('change-password')
@@ -96,9 +144,9 @@ export class AuthController {
   @ApiOperation({ summary: 'Get current authenticated user' })
   @ApiResponse({ status: 200, description: 'Returns current user' })
   @ApiResponse({ status: 401, description: 'Unauthorized' })
-  async getCurrentUser(
+  getCurrentUser(
     @CurrentUser() user: CurrentUserType,
-  ): Promise<ApiResponseDto<CurrentUserType>> {
+  ): ApiResponseDto<CurrentUserType> {
     return ApiResponseDto.success(user);
   }
 }

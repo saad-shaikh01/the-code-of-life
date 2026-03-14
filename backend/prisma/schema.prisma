@@ -45,11 +45,13 @@ enum SubscriptionTier {
 // Handles authentication and cloud saves for user progress
 
 model User {
-  id        String  @id @default(cuid())
-  email     String  @unique
-  username  String  @unique
-  password  String
-  avatarUrl String?
+  id                  String    @id @default(cuid())
+  email               String    @unique
+  username            String    @unique
+  password            String
+  avatarUrl           String?
+  passwordResetToken  String?
+  passwordResetExpiry DateTime?
 
   // Cloud Save Data
   currentLevel Int       @default(1)
@@ -58,8 +60,8 @@ model User {
   lastPlayedAt DateTime?
 
   // Growth Avatar System
-  growthPoints Int       @default(0)
-  growthStage  Int       @default(1) // 1=Seed, 2=Sprout, 3=Sapling, 4=Young Tree, 5=Mature Tree
+  growthPoints Int @default(0)
+  growthStage  Int @default(1) // 1=Seed, 2=Sprout, 3=Sapling, 4=Young Tree, 5=Mature Tree
 
   // Timestamps
   createdAt DateTime @default(now())

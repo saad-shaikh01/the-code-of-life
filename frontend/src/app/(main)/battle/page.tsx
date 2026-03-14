@@ -1,26 +1,37 @@
 'use client';
 
-import { useState, useEffect } from 'react';
-import { motion, AnimatePresence } from 'framer-motion';
+import { useEffect, useState } from 'react';
+import { motion } from 'framer-motion';
 import {
-  Swords,
-  Users,
-  Loader2,
-  CheckCircle,
-  XCircle,
-  Trophy,
-  Clock,
-  Zap,
   AlertCircle,
+  CheckCircle,
+  Clock,
+  Loader2,
+  Swords,
+  Trophy,
+  Users,
+  XCircle,
+  Zap,
 } from 'lucide-react';
+import { Avatar } from '@/components/ui/avatar';
+import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
-import { Badge } from '@/components/ui/badge';
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog';
 import { Progress } from '@/components/ui/progress';
-import { Avatar } from '@/components/ui/avatar';
 import { useBattleSocket } from '@/hooks/useBattleSocket';
+import { useAuthStore } from '@/stores';
 
 type Difficulty = 'BEGINNER' | 'INTERMEDIATE' | 'ADVANCED' | 'MASTER';
+
+const MAX_RECONNECT_ATTEMPTS = 5;
 
 const difficultyColors: Record<Difficulty, string> = {
   BEGINNER: 'bg-green-100 text-green-800',
@@ -30,8 +41,11 @@ const difficultyColors: Record<Difficulty, string> = {
 };
 
 export default function BattlePage() {
+  const { user } = useAuthStore();
   const {
     isConnected,
+    connectionState,
+    reconnectAttempt,
     lobby,
     matchData,
     opponentProgress,
@@ -42,66 +56,107 @@ export default function BattlePage() {
     setReady,
     updateProgress,
     submitSolution,
+    retryConnection,
     resetState,
   } = useBattleSocket();
 
-  const [selectedDifficulty, setSelectedDifficulty] = useState<Difficulty>('BEGINNER');
+  const [selectedDifficulty, setSelectedDifficulty] =
+    useState<Difficulty>('BEGINNER');
   const [isSearching, setIsSearching] = useState(false);
   const [countdown, setCountdown] = useState<number | null>(null);
   const [gameTime, setGameTime] = useState(0);
   const [playerInput, setPlayerInput] = useState('');
-  const [myProgress, setMyProgress] = useState(0);
+  const [showForfeitDialog, setShowForfeitDialog] = useState(false);
 
-  // Handle match countdown
+  const currentUserId = user?.id;
+  const currentPlayer = currentUserId
+    ? lobby?.players.find((player) => player.id === currentUserId)
+    : undefined;
+  const opponent = currentUserId
+    ? lobby?.players.find((player) => player.id !== currentUserId)
+    : undefined;
+  const myResult = currentUserId
+    ? gameOver?.results.find((result) => result.playerId === currentUserId)
+    : undefined;
+  const opponentResult = currentUserId
+    ? gameOver?.results.find((result) => result.playerId !== currentUserId)
+    : undefined;
+  const myProgress = matchData
+    ? Math.min((playerInput.length / matchData.encryptedPattern.length) * 100, 100)
+    : 0;
+  const hasOpponent = Boolean(opponent);
+  const opponentProgressValue = opponentProgress?.progress ?? 0;
+  const opponentProgressLabel = opponentProgress
+    ? `${opponentProgressValue.toFixed(0)}%`
+    : 'Waiting...';
+  const isReconnecting = connectionState === 'reconnecting';
+  const isConnectionFailure =
+    error?.code === 'CONNECT_ERROR' || error?.code === 'RECONNECT_FAILED';
+  const reconnectStatusLabel =
+    reconnectAttempt > 0
+      ? `Attempt ${Math.min(reconnectAttempt, MAX_RECONNECT_ATTEMPTS)}/${MAX_RECONNECT_ATTEMPTS}`
+      : 'Restoring your battle session';
+
   useEffect(() => {
     if (matchData?.countdownSeconds) {
+      // Match countdown is driven by socket-delivered battle state.
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       setCountdown(matchData.countdownSeconds);
+
       const interval = setInterval(() => {
-        setCountdown((prev) => {
-          if (prev === null || prev <= 1) {
+        setCountdown((previous) => {
+          if (previous === null || previous <= 1) {
             clearInterval(interval);
             return null;
           }
-          return prev - 1;
+
+          return previous - 1;
         });
       }, 1000);
+
       return () => clearInterval(interval);
     }
   }, [matchData]);
 
-  // Handle game timer
   useEffect(() => {
     if (matchData && countdown === null && !gameOver) {
       const interval = setInterval(() => {
-        setGameTime((prev) => prev + 1);
+        setGameTime((previous) => previous + 1);
       }, 1000);
+
       return () => clearInterval(interval);
     }
-  }, [matchData, countdown, gameOver]);
+  }, [countdown, gameOver, matchData]);
 
-  // Update progress based on input
   useEffect(() => {
-    if (!matchData) return;
-
-    const totalChars = matchData.encryptedPattern.length;
-    const progress = Math.min((playerInput.length / totalChars) * 100, 100);
-    setMyProgress(progress);
+    if (!matchData) {
+      return;
+    }
 
     updateProgress({
-      progress,
+      progress: myProgress,
       correctCharacters: playerInput.length,
-      totalCharacters: totalChars,
+      totalCharacters: matchData.encryptedPattern.length,
       hintsUsed: 0,
     });
-  }, [playerInput, matchData, updateProgress]);
+  }, [matchData, myProgress, playerInput, updateProgress]);
+
+  const resetLocalUi = () => {
+    setCountdown(null);
+    setGameTime(0);
+    setPlayerInput('');
+    setIsSearching(false);
+    setShowForfeitDialog(false);
+  };
 
   const handleFindMatch = () => {
     setIsSearching(true);
+    setShowForfeitDialog(false);
     joinLobby(undefined, selectedDifficulty);
   };
 
   const handleCancel = () => {
-    setIsSearching(false);
+    resetLocalUi();
     leaveLobby();
   };
 
@@ -109,12 +164,24 @@ export default function BattlePage() {
     submitSolution(playerInput, gameTime);
   };
 
-  const handlePlayAgain = () => {
+  const handleBackToLobby = () => {
+    resetLocalUi();
     resetState();
-    setPlayerInput('');
-    setGameTime(0);
-    setMyProgress(0);
-    setIsSearching(false);
+  };
+
+  const handlePlayAgain = () => {
+    resetLocalUi();
+    resetState();
+    setIsSearching(true);
+    joinLobby(undefined, selectedDifficulty);
+  };
+
+  const handleRetryConnection = () => {
+    retryConnection();
+  };
+
+  const handleConfirmForfeit = () => {
+    handleCancel();
   };
 
   const formatTime = (seconds: number) => {
@@ -123,32 +190,53 @@ export default function BattlePage() {
     return `${mins}:${secs.toString().padStart(2, '0')}`;
   };
 
-  // Error state
-  if (error) {
+  const reconnectingBanner = isReconnecting ? (
+    <div className="mb-6 rounded-xl border border-amber-500/20 bg-amber-500/10 p-4">
+      <div className="flex items-center justify-center gap-3 text-center text-amber-200">
+        <Loader2 className="h-4 w-4 animate-spin" />
+        <div>
+          <p className="font-medium">Connection lost. Reconnecting...</p>
+          <p className="text-sm text-amber-100/80">{reconnectStatusLabel}</p>
+        </div>
+      </div>
+    </div>
+  ) : null;
+
+  if (error && !isReconnecting) {
     return (
       <div className="min-h-screen py-12 px-4">
         <div className="max-w-2xl mx-auto">
           <Card className="p-8 text-center">
             <AlertCircle className="h-12 w-12 mx-auto mb-4 text-red-500" />
-            <h2 className="text-xl font-bold mb-2">Connection Error</h2>
-            <p className="text-muted-foreground mb-4">{error.message}</p>
-            <Button onClick={resetState}>Try Again</Button>
+            <h2 className="text-xl font-bold mb-2">
+              {isConnectionFailure ? 'Connection Failed' : 'Battle Error'}
+            </h2>
+            <p className="text-muted-foreground mb-6">{error.message}</p>
+            <div className="flex flex-col sm:flex-row gap-3 justify-center">
+              <Button onClick={isConnectionFailure ? handleRetryConnection : handleBackToLobby}>
+                {isConnectionFailure ? 'Retry Connection' : 'Back to Lobby'}
+              </Button>
+              <Button variant="outline" onClick={handleCancel}>
+                Return to Lobby
+              </Button>
+            </div>
           </Card>
         </div>
       </div>
     );
   }
 
-  // Game Over state
   if (gameOver) {
-    const isWinner = gameOver.results.some(
-      (r) => r.playerId === gameOver.winnerId && r.isCorrect
+    const isWinner = Boolean(
+      myResult &&
+        myResult.playerId === gameOver.winnerId &&
+        myResult.isCorrect,
     );
-    const myResult = gameOver.results[0]; // TODO: Get actual user's result
 
     return (
       <div className="min-h-screen py-12 px-4">
         <div className="max-w-3xl mx-auto">
+          {reconnectingBanner}
           <motion.div
             initial={{ opacity: 0, scale: 0.9 }}
             animate={{ opacity: 1, scale: 1 }}
@@ -167,11 +255,23 @@ export default function BattlePage() {
                   )}
                 </motion.div>
                 <h1 className="text-3xl font-bold mb-2">
-                  {isWinner ? 'Victory!' : 'Better luck next time!'}
+                  {myResult
+                    ? isWinner
+                      ? 'Victory!'
+                      : 'Better luck next time!'
+                    : 'Battle complete!'}
                 </h1>
                 <p className="text-muted-foreground">
                   Winner: {gameOver.winnerUsername}
                 </p>
+                {myResult && (
+                  <p className="text-sm text-muted-foreground mt-2">
+                    You scored {myResult.score} points in{' '}
+                    {formatTime(myResult.timeElapsed)}.
+                    {opponentResult &&
+                      ` ${opponentResult.username} scored ${opponentResult.score}.`}
+                  </p>
+                )}
               </div>
 
               <div className="space-y-4 mb-8">
@@ -211,10 +311,10 @@ export default function BattlePage() {
               </div>
 
               <div className="flex gap-4 justify-center">
-                <Button variant="outline" onClick={handlePlayAgain}>
+                <Button variant="outline" onClick={handleBackToLobby}>
                   Back to Lobby
                 </Button>
-                <Button onClick={handleFindMatch}>
+                <Button onClick={handlePlayAgain}>
                   <Swords className="h-4 w-4 mr-2" />
                   Play Again
                 </Button>
@@ -226,30 +326,32 @@ export default function BattlePage() {
     );
   }
 
-  // Countdown state
   if (countdown !== null && countdown > 0) {
     return (
-      <div className="min-h-screen flex items-center justify-center">
-        <motion.div
-          key={countdown}
-          initial={{ scale: 0.5, opacity: 0 }}
-          animate={{ scale: 1, opacity: 1 }}
-          exit={{ scale: 1.5, opacity: 0 }}
-          className="text-center"
-        >
-          <p className="text-8xl font-bold text-primary">{countdown}</p>
-          <p className="text-xl text-muted-foreground mt-4">Get Ready!</p>
-        </motion.div>
+      <div className="min-h-screen flex items-center justify-center px-4">
+        <div className="w-full max-w-2xl">
+          {reconnectingBanner}
+          <motion.div
+            key={countdown}
+            initial={{ scale: 0.5, opacity: 0 }}
+            animate={{ scale: 1, opacity: 1 }}
+            exit={{ scale: 1.5, opacity: 0 }}
+            className="text-center"
+          >
+            <p className="text-8xl font-bold text-primary">{countdown}</p>
+            <p className="text-xl text-muted-foreground mt-4">Get Ready!</p>
+          </motion.div>
+        </div>
       </div>
     );
   }
 
-  // In-game state
   if (matchData && countdown === null) {
     return (
       <div className="min-h-screen py-8 px-4">
         <div className="max-w-4xl mx-auto">
-          {/* Header with timer and progress */}
+          {reconnectingBanner}
+
           <div className="flex items-center justify-between mb-6">
             <div className="flex items-center gap-4">
               <Badge className={difficultyColors[matchData.difficulty as Difficulty]}>
@@ -260,12 +362,15 @@ export default function BattlePage() {
                 <span className="font-mono text-lg">{formatTime(gameTime)}</span>
               </div>
             </div>
-            <Button variant="destructive" size="sm" onClick={handleCancel}>
+            <Button
+              variant="destructive"
+              size="sm"
+              onClick={() => setShowForfeitDialog(true)}
+            >
               Forfeit
             </Button>
           </div>
 
-          {/* Progress comparison */}
           <Card className="p-4 mb-6">
             <div className="grid md:grid-cols-2 gap-6">
               <div>
@@ -278,21 +383,35 @@ export default function BattlePage() {
                 <Progress value={myProgress} variant="default" />
               </div>
               <div>
-                <div className="flex items-center justify-between mb-2">
-                  <span className="font-semibold">Opponent</span>
-                  <span className="text-sm text-muted-foreground">
-                    {opponentProgress?.progress.toFixed(0) || 0}%
-                  </span>
-                </div>
-                <Progress
-                  value={opponentProgress?.progress || 0}
-                  variant="gold"
-                />
+                {hasOpponent ? (
+                  <>
+                    <div className="flex items-center justify-between mb-2">
+                      <span className="font-semibold">
+                        {opponent?.username || 'Opponent'}
+                      </span>
+                      <span className="text-sm text-muted-foreground">
+                        {opponentProgressLabel}
+                      </span>
+                    </div>
+                    <Progress value={opponentProgressValue} variant="gold" />
+                    <div className="mt-2 text-sm text-muted-foreground">
+                      Hints used: {opponentProgress?.hintsUsed ?? 0}
+                    </div>
+                  </>
+                ) : (
+                  <div className="h-full rounded-lg border border-dashed border-muted-foreground/30 p-4 text-center">
+                    <Loader2 className="h-5 w-5 animate-spin mx-auto mb-3 text-muted-foreground" />
+                    <p className="font-semibold">Waiting for opponent...</p>
+                    <p className="text-sm text-muted-foreground mt-1">
+                      Opponent progress will appear here once they reconnect or
+                      send an update.
+                    </p>
+                  </div>
+                )}
               </div>
             </div>
           </Card>
 
-          {/* Puzzle */}
           <Card className="p-6 mb-6">
             <h2 className="text-lg font-semibold mb-4">Decrypt the message:</h2>
             <div className="p-4 bg-muted rounded-lg font-mono text-lg mb-4 break-all">
@@ -300,7 +419,7 @@ export default function BattlePage() {
             </div>
             <textarea
               value={playerInput}
-              onChange={(e) => setPlayerInput(e.target.value)}
+              onChange={(event) => setPlayerInput(event.target.value)}
               className="w-full p-4 border rounded-lg font-mono min-h-[120px] resize-none"
               placeholder="Type your solution here..."
             />
@@ -313,19 +432,39 @@ export default function BattlePage() {
             </Button>
           </div>
         </div>
+
+        <Dialog open={showForfeitDialog} onOpenChange={setShowForfeitDialog}>
+          <DialogContent>
+            <DialogHeader>
+              <DialogTitle>Forfeit match?</DialogTitle>
+              <DialogDescription>
+                Leaving now will end your battle and your opponent will be
+                declared the winner.
+              </DialogDescription>
+            </DialogHeader>
+            <DialogFooter>
+              <Button variant="outline" onClick={() => setShowForfeitDialog(false)}>
+                Continue Playing
+              </Button>
+              <Button variant="destructive" onClick={handleConfirmForfeit}>
+                Yes, Forfeit
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
       </div>
     );
   }
 
-  // Lobby state
   if (lobby) {
-    const currentPlayer = lobby.players[0]; // TODO: Identify current user
-    const allReady = lobby.players.length === lobby.maxPlayers &&
-      lobby.players.every((p) => p.isReady);
+    const allReady =
+      lobby.players.length === lobby.maxPlayers &&
+      lobby.players.every((player) => player.isReady);
 
     return (
       <div className="min-h-screen py-12 px-4">
         <div className="max-w-2xl mx-auto">
+          {reconnectingBanner}
           <motion.div
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
@@ -338,6 +477,17 @@ export default function BattlePage() {
                   {lobby.players.length}/{lobby.maxPlayers} players
                 </p>
               </div>
+
+              {!hasOpponent && (
+                <div className="mb-6 rounded-xl border border-dashed border-muted-foreground/30 p-6 text-center">
+                  <Loader2 className="h-6 w-6 animate-spin mx-auto mb-3 text-muted-foreground" />
+                  <p className="font-semibold">Waiting for opponent...</p>
+                  <p className="text-sm text-muted-foreground mt-1">
+                    Searching for a {selectedDifficulty.toLowerCase()} player
+                    to join your lobby.
+                  </p>
+                </div>
+              )}
 
               <div className="space-y-4 mb-8">
                 {lobby.players.map((player) => (
@@ -352,27 +502,30 @@ export default function BattlePage() {
                         fallback={player.username}
                       />
                       <div>
-                        <p className="font-semibold">{player.username}</p>
+                        <div className="flex items-center gap-2">
+                          <p className="font-semibold">{player.username}</p>
+                          {player.id === currentUserId && (
+                            <Badge className="bg-primary/10 text-primary border-primary/20">
+                              You
+                            </Badge>
+                          )}
+                        </div>
                         <p className="text-sm text-muted-foreground">
                           Level {player.level}
                         </p>
                       </div>
                     </div>
-                    <Badge className={player.isReady ? 'bg-green-500/20 text-green-400 border-green-500/30' : 'bg-gray-500/20 text-gray-400 border-gray-500/30'}>
+                    <Badge
+                      className={
+                        player.isReady
+                          ? 'bg-green-500/20 text-green-400 border-green-500/30'
+                          : 'bg-gray-500/20 text-gray-400 border-gray-500/30'
+                      }
+                    >
                       {player.isReady ? 'Ready' : 'Not Ready'}
                     </Badge>
                   </div>
                 ))}
-
-                {/* Waiting for opponent */}
-                {lobby.players.length < lobby.maxPlayers && (
-                  <div className="flex items-center justify-center p-4 rounded-lg border-2 border-dashed border-muted-foreground/30">
-                    <Loader2 className="h-5 w-5 animate-spin mr-2 text-muted-foreground" />
-                    <span className="text-muted-foreground">
-                      Waiting for opponent...
-                    </span>
-                  </div>
-                )}
               </div>
 
               <div className="flex gap-4">
@@ -382,9 +535,13 @@ export default function BattlePage() {
                 <Button
                   onClick={() => setReady(!currentPlayer?.isReady)}
                   className="flex-1"
-                  disabled={lobby.players.length < lobby.maxPlayers}
+                  disabled={!currentPlayer || lobby.players.length < lobby.maxPlayers}
                 >
-                  {currentPlayer?.isReady ? 'Not Ready' : 'Ready'}
+                  {currentPlayer
+                    ? currentPlayer.isReady
+                      ? 'Not Ready'
+                      : 'Ready'
+                    : 'Waiting for your player slot...'}
                 </Button>
               </div>
 
@@ -400,10 +557,10 @@ export default function BattlePage() {
     );
   }
 
-  // Default: Find Match screen
   return (
     <div className="min-h-screen py-12 px-4">
       <div className="max-w-2xl mx-auto">
+        {reconnectingBanner}
         <motion.div
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
@@ -420,7 +577,11 @@ export default function BattlePage() {
           {!isConnected ? (
             <div className="text-center py-8">
               <Loader2 className="h-8 w-8 animate-spin mx-auto mb-4 text-primary" />
-              <p className="text-muted-foreground">Connecting to server...</p>
+              <p className="text-muted-foreground">
+                {isReconnecting
+                  ? 'Reconnecting to the battle server...'
+                  : 'Connecting to server...'}
+              </p>
             </div>
           ) : isSearching ? (
             <div className="text-center py-8">
@@ -437,21 +598,23 @@ export default function BattlePage() {
             <>
               <h2 className="text-xl font-semibold mb-6">Select Difficulty</h2>
               <div className="grid grid-cols-2 gap-4 mb-8">
-                {(['BEGINNER', 'INTERMEDIATE', 'ADVANCED', 'MASTER'] as Difficulty[]).map(
-                  (diff) => (
-                    <button
-                      key={diff}
-                      onClick={() => setSelectedDifficulty(diff)}
-                      className={`p-4 rounded-lg border-2 transition-all ${
-                        selectedDifficulty === diff
-                          ? 'border-primary bg-primary/10'
-                          : 'border-muted hover:border-primary/50'
-                      }`}
-                    >
-                      <Badge className={difficultyColors[diff]}>{diff}</Badge>
-                    </button>
-                  )
-                )}
+                {(
+                  ['BEGINNER', 'INTERMEDIATE', 'ADVANCED', 'MASTER'] as Difficulty[]
+                ).map((difficulty) => (
+                  <button
+                    key={difficulty}
+                    onClick={() => setSelectedDifficulty(difficulty)}
+                    className={`p-4 rounded-lg border-2 transition-all ${
+                      selectedDifficulty === difficulty
+                        ? 'border-primary bg-primary/10'
+                        : 'border-muted hover:border-primary/50'
+                    }`}
+                  >
+                    <Badge className={difficultyColors[difficulty]}>
+                      {difficulty}
+                    </Badge>
+                  </button>
+                ))}
               </div>
               <Button className="w-full" size="lg" onClick={handleFindMatch}>
                 <Swords className="h-5 w-5 mr-2" />

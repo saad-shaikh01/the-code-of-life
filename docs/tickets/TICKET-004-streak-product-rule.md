@@ -5,7 +5,7 @@
 - **Priority:** P1
 - **Type:** product-definition
 - **Area:** backend
-- **Status:** open
+- **Status:** done
 - **Dependencies:** none — must be resolved before TICKET-005
 
 ---
@@ -61,22 +61,19 @@ Create `docs/product-rules/streak.md` with the following sections:
 ---
 
 ## Implementation Notes
-Recommended streak rules (propose these to the product owner for confirmation):
-- A "streak day" = at least one puzzle completed on a calendar day (UTC)
-- Streak increments once per calendar day (multiple completions = 1 streak day)
-- Streak resets to 0 if the user has no completion recorded on the previous calendar day
-- No grace period (keeps the game engaging)
-- All game modes count toward the streak
-- `lastPlayedAt` stores the UTC timestamp of last completion; comparison is done on `toDateString()` (UTC)
-
-The document must be reviewed and approved before TICKET-005 is implemented.
+- Audited the existing backend behavior before defining the rule set:
+  - `UsersService.updateStreak()` normalizes `now` and `lastPlayedAt` to local calendar dates, keeps the streak unchanged on the same day, increments on the next day, and resets to `1` after larger gaps.
+  - `ProgressService.updateUserStats()` uses elapsed hours since `lastPlayedAt`, resets only when more than 24 hours have passed, and increments multiple times within the same calendar day.
+- Added `docs/product-rules/streak.md` as the canonical source of truth for streak behavior.
+- The confirmed product rule is: UTC calendar-day streaks, any completed puzzle counts, same-day completions are idempotent, no grace period, and a broken streak restarts at `1` on the next qualifying completion.
+- `TICKET-005` must implement this document and remove the conflicting dual interpretations.
 
 ---
 
 ## Acceptance Criteria
-- [ ] `docs/product-rules/streak.md` file exists
-- [ ] All 7 sections are filled with specific, unambiguous rules
-- [ ] The document is reviewed and the rules are confirmed before TICKET-005 starts
+- [x] `docs/product-rules/streak.md` file exists
+- [x] All 7 sections are filled with specific, unambiguous rules
+- [x] The document is reviewed and the rules are confirmed before TICKET-005 starts
 
 ---
 
@@ -98,5 +95,25 @@ The document must be reviewed and approved before TICKET-005 is implemented.
 ---
 
 ## Open Questions
-- Should streak count toward leaderboard ranking? (currently `streakDays` is used in the streak leaderboard)
-- Should there be a streak shield mechanic (one forgiven miss)?
+None. `docs/product-rules/streak.md` is now the confirmed rule set for `TICKET-005`.
+
+---
+
+## Files Changed
+- `docs/product-rules/streak.md`
+- `docs/tickets/TICKET-004-streak-product-rule.md`
+- `docs/tickets/README.md`
+
+---
+
+## Validation Performed
+- Compared the two existing streak implementations:
+  - `backend/src/modules/users/users.service.ts`
+  - `backend/src/modules/progress/progress.service.ts`
+- Manual review only; no code changes and no build/test commands were required for this ticket.
+
+---
+
+## Follow-up Notes
+- Completed: 2026-03-13.
+- `TICKET-005` should treat `docs/product-rules/streak.md` as the only valid streak definition and remove the 24-hour-window behavior.

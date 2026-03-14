@@ -12,7 +12,9 @@ export const decodeRequestSchema = z.object({
   encryptedPattern: z
     .string()
     .min(1, 'Encrypted pattern is required')
-    .describe('The encrypted pattern containing symbols to decode'),
+    .describe(
+      'The encrypted pattern containing space-delimited numeric cipher tokens',
+    ),
 
   customMap: symbolMapSchema.describe(
     'Custom symbol map to override default mappings',
@@ -26,7 +28,7 @@ export const encodeRequestSchema = z.object({
   text: z
     .string()
     .min(1, 'Text is required')
-    .describe('Plain text to encode into symbols'),
+    .describe('Plain text to encode into numeric cipher tokens'),
 
   customMap: symbolMapSchema.describe(
     'Custom symbol map to override default mappings',

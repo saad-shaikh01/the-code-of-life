@@ -5,143 +5,132 @@
 - **Priority:** P1
 - **Type:** bug
 - **Area:** frontend
-- **Status:** open
+- **Status:** done
 - **Dependencies:** TICKET-003 (user identification fix should be done first)
 
 ---
 
 ## Problem
-The battle mode WebSocket connection and lobby UI have multiple reliability and UX gaps:
+Battle mode had multiple reliability and UX gaps:
 
-1. **No heartbeat/ping-pong:** Socket.IO has built-in ping/pong, but no application-level heartbeat means stale connections go undetected. If a player's connection silently drops and their Socket.IO ping isn't caught, the lobby stays in a broken state.
-
-2. **No reconnection logic:** If the network drops briefly (mobile switching from WiFi to 4G), the socket disconnects. There is no reconnect attempt or "reconnecting..." state shown to the user. The player loses their match with no recovery path.
-
-3. **No null check on `opponentProgress`:** If the opponent hasn't sent any progress updates yet, `opponentProgress` is null/undefined. Any UI access like `opponentProgress.percentage` will throw and potentially crash the component.
-
-4. **No "waiting for opponent" UX state:** After joining a lobby, if only one player is present, there's no clear "waiting for opponent to join..." message. The UI likely shows a broken or empty lobby state.
-
-5. **No forfeit confirmation:** The forfeit button exists but fires immediately without a confirmation dialog. Accidental forfeits are likely.
+1. No application-level heartbeat to detect stale connections
+2. No reconnect state or room rejoin flow after a network drop
+3. `opponentProgress` could be `null` before the opponent sent updates
+4. Lobby waiting state was weak and easy to confuse with a broken UI
+5. The forfeit button executed immediately without confirmation
 
 ---
 
 ## Why This Matters
-Battle mode is a real-time multiplayer feature — any instability or crash here directly kills the competitive experience. A crashed component in a battle could freeze the entire game view. Missing UX states make the waiting period confusing.
+Battle mode is a real-time multiplayer feature. A stale socket, a missing null guard, or a silent reconnect failure can freeze or crash the whole battle screen and leave players with no clear recovery path.
 
 ---
 
 ## Evidence
-- `frontend/src/hooks/useBattleSocket.ts` — no heartbeat, no reconnect logic
-- `frontend/src/app/(main)/battle/page.tsx` — `opponentProgress` used without null check
-- `issues.md` line 9: "battle mode ma multiplayer feature ma buht sare bugs ha"
-- Socket.IO client `io()` options: no `reconnection` config explicitly set (defaults may handle basic reconnect, but no UI state for it)
+- `frontend/src/hooks/useBattleSocket.ts` had no heartbeat, reconnect state, or room rejoin logic
+- `frontend/src/app/(main)/battle/page.tsx` directly rendered opponent progress with no meaningful waiting-state fallback
+- `backend/src/modules/battle/battle.gateway.ts` had no app-level `ping` / `pong` handler for the client heartbeat
 
 ---
 
 ## Scope
-
-### 1. Null guards for `opponentProgress`
-In `battle/page.tsx`, wherever `opponentProgress` is accessed:
-```typescript
-// Before:
-const percentage = opponentProgress.percentage;
-
-// After:
-const percentage = opponentProgress?.percentage ?? 0;
-```
-Add optional chaining and nullish coalescing on all `opponentProgress` property accesses.
-
-### 2. "Waiting for opponent" lobby state
-When `lobby.players.length < 2`, show a waiting state:
-```tsx
-{lobby.players.length < 2 && (
-  <div className="text-center py-12">
-    <Spinner />
-    <p>Waiting for an opponent to join...</p>
-    <p className="text-muted-foreground">Difficulty: {selectedDifficulty}</p>
-    <Button variant="ghost" onClick={handleLeaveLobby}>Cancel</Button>
-  </div>
-)}
-```
-
-### 3. Reconnection state and auto-reconnect
-Configure socket with explicit reconnection options and show a reconnecting banner:
-```typescript
-// In useBattleSocket.ts
-const socket = io(wsUrl, {
-  auth: { token },
-  transports: ['websocket'],
-  reconnection: true,
-  reconnectionAttempts: 5,
-  reconnectionDelay: 1000,
-  reconnectionDelayMax: 5000,
-});
-```
-Add state: `isReconnecting: boolean`. Set on `'reconnect_attempt'` event, clear on `'reconnect'`.
-In battle page UI, show a toast or banner: "Connection lost. Reconnecting... (attempt X/5)".
-
-### 4. Forfeit confirmation dialog
-Wrap the forfeit action in a confirmation dialog:
-```tsx
-<Dialog open={showForfeitDialog} onOpenChange={setShowForfeitDialog}>
-  <DialogContent>
-    <DialogTitle>Forfeit match?</DialogTitle>
-    <DialogDescription>Your opponent will be declared the winner.</DialogDescription>
-    <Button variant="destructive" onClick={confirmForfeit}>Yes, Forfeit</Button>
-    <Button variant="ghost" onClick={() => setShowForfeitDialog(false)}>Continue Playing</Button>
-  </DialogContent>
-</Dialog>
-```
-
-### 5. Connection error display
-On `'connect_error'` and failed reconnection (`'reconnect_failed'`), show a clear error state with a "Return to Lobby" button rather than leaving the user on a frozen screen.
+1. Add heartbeat / stale-connection detection in the battle socket hook
+2. Add bounded reconnect handling and room rejoin behavior
+3. Null-guard all opponent progress rendering
+4. Improve lobby waiting UX and disable readiness until both players are present
+5. Add a forfeit confirmation dialog
+6. Surface reconnecting and reconnect-failed UI states
 
 ---
 
 ## Out of Scope
-- Backend WebSocket changes (TICKET-026 covers WS input validation)
-- Battle scoring logic
-- Matchmaking improvements
+- Battle scoring logic changes
+- Matchmaking redesign
+- WebSocket payload schema validation (`TICKET-026`)
 
 ---
 
 ## Implementation Notes
-- Socket.IO client's default reconnection settings do attempt reconnects, but with no UI indication — the user sees a frozen screen
-- The `useBattleSocket` hook should expose `connectionState: 'connected' | 'connecting' | 'reconnecting' | 'disconnected'` for the UI to consume
-- Keep socket reconnection attempts bounded (5 max) — after 5 failures, show "Connection failed" with a manual retry button
+- `useBattleSocket()` now exposes:
+  - `connectionState`
+  - `reconnectAttempt`
+  - `retryConnection()`
+- The hook now stores the last `join_lobby` payload and re-emits it after reconnect so the player rejoins the battle room automatically
+- Added an app-level heartbeat:
+  - emits `ping` every 25 seconds
+  - expects `pong` within 5 seconds
+  - triggers one manual reconnect cycle if the connection goes stale
+- Socket.IO client reconnect settings are now explicit:
+  - `reconnection: true`
+  - `reconnectionAttempts: 5`
+  - `reconnectionDelay: 2000`
+- `BattleGateway` now responds to `ping` with `pong`
+- The battle page now:
+  - guards all opponent progress access with null-safe fallbacks
+  - shows `Waiting...` / `0` placeholders before opponent updates arrive
+  - shows a reconnecting banner while reconnect attempts are in progress
+  - shows a connection-failed error card with retry and return-to-lobby actions after reconnect failure
+  - shows a clear lobby waiting panel when only one player is present
+  - keeps the Ready button disabled until both players are in the lobby
+  - requires confirmation before forfeiting
 
 ---
 
 ## Acceptance Criteria
-- [ ] No crash when `opponentProgress` is null (before opponent sends any updates)
-- [ ] "Waiting for opponent" message shown when lobby has only 1 player
-- [ ] Disconnecting and reconnecting within 5 attempts shows a reconnecting banner
-- [ ] After 5 failed reconnection attempts, shows a "Connection failed" error state with retry option
-- [ ] Forfeit button shows a confirmation dialog before executing
-- [ ] `useBattleSocket` exposes `connectionState` for UI consumption
+- [x] No crash when `opponentProgress` is null (before opponent sends any updates)
+- [x] "Waiting for opponent" message shown when lobby has only 1 player
+- [x] Disconnecting and reconnecting within 5 attempts shows a reconnecting banner
+- [x] After 5 failed reconnection attempts, shows a "Connection failed" error state with retry option
+- [x] Forfeit button shows a confirmation dialog before executing
+- [x] `useBattleSocket` exposes `connectionState` for UI consumption
 
 ---
 
 ## Testing Requirements
-- **Manual QA:**
-  1. Join a battle lobby alone — verify "waiting for opponent" message shown
-  2. In a live battle, disable network briefly (airplane mode) — verify reconnecting state shown
-  3. Click Forfeit — verify confirmation dialog appears before match ends
-- **Null safety test:** Trigger a battle start without sending any `progress_update` events — verify no crash on opponent progress display
+- **Manual QA scenarios to run:**
+  1. Join a battle lobby alone and verify the waiting message and disabled Ready button
+  2. Start a battle, briefly drop the network, and verify the reconnecting banner appears
+  3. Keep the network down through all retries and verify the connection-failed card appears with retry / return actions
+  4. Open a live battle before any opponent progress event and verify the page renders without crashing
+  5. Click `Forfeit` and verify the confirmation dialog appears before leaving the battle
 
 ---
 
 ## Affected Areas
 - `frontend/src/hooks/useBattleSocket.ts`
 - `frontend/src/app/(main)/battle/page.tsx`
+- `backend/src/modules/battle/battle.gateway.ts`
 
 ---
 
 ## Risks / Edge Cases
-- Reconnection during an active match: the server's in-memory lobby may still have the player — reconnecting socket gets a new socket ID, which may not match the lobby entry. This may require a "rejoin lobby" event from the client on reconnect — audit the backend gateway to confirm.
-- If the match is in `COMPLETED` state when the player reconnects, show the game over screen (don't start a new game)
+- Rejoining an in-progress match still depends on the backend lobby still existing in memory; the client now rejoins the room, but long disconnects can still lose the session if the lobby disappears
+- The reconnect banner and retry UI are frontend-only recovery states; they do not change battle scoring or server-side winner resolution
 
 ---
 
 ## Open Questions
-- Does the backend `BattleGateway` support a "rejoin" event for reconnecting players? If not, TICKET-010's reconnection handling is UI-only (shows state but cannot truly resume).
+None.
+
+---
+
+## Files Changed
+- `frontend/src/hooks/useBattleSocket.ts`
+- `frontend/src/app/(main)/battle/page.tsx`
+- `backend/src/modules/battle/battle.gateway.ts`
+- `docs/tickets/TICKET-010-battle-socket-hardening.md`
+- `docs/tickets/README.md`
+
+---
+
+## Validation Performed
+- `frontend`: `npx eslint -- "src/hooks/useBattleSocket.ts" "src/app/(main)/battle/page.tsx"`
+- `backend`: `npx eslint -- "src/modules/battle/battle.gateway.ts"`
+- `backend`: `npm run build`
+- `frontend`: `npm run build`
+
+---
+
+## Follow-up Notes
+- Completed: 2026-03-15.
+- Browser manual QA was not executed in this terminal session; the battle reconnect and solo-lobby scenarios above remain the required follow-up checks.

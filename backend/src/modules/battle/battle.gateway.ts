@@ -31,7 +31,7 @@ export class BattleGateway implements OnGatewayConnection, OnGatewayDisconnect {
 
   constructor(private readonly battleService: BattleService) {}
 
-  async handleConnection(client: AuthenticatedSocket) {
+  handleConnection(client: AuthenticatedSocket) {
     this.logger.log(`Client connected: ${client.id}`);
     // Authentication will be handled when they try to join a lobby
   }
@@ -40,6 +40,11 @@ export class BattleGateway implements OnGatewayConnection, OnGatewayDisconnect {
     this.logger.log(`Client disconnected: ${client.id}`);
     // Clean up player from any lobbies
     await this.battleService.handlePlayerDisconnect(client.id);
+  }
+
+  @SubscribeMessage('ping')
+  handlePing(@ConnectedSocket() client: AuthenticatedSocket) {
+    client.emit('pong', { timestamp: Date.now() });
   }
 
   @SubscribeMessage('join_lobby')
@@ -51,7 +56,10 @@ export class BattleGateway implements OnGatewayConnection, OnGatewayDisconnect {
     try {
       const user = client.user;
       if (!user) {
-        return { event: 'battle_error', data: { code: 'AUTH_REQUIRED', message: 'Authentication required' } };
+        return {
+          event: 'battle_error',
+          data: { code: 'AUTH_REQUIRED', message: 'Authentication required' },
+        };
       }
 
       const lobby = await this.battleService.joinLobby(
@@ -63,7 +71,7 @@ export class BattleGateway implements OnGatewayConnection, OnGatewayDisconnect {
       );
 
       // Join the Socket.IO room for this lobby
-      client.join(`lobby:${lobby.id}`);
+      await client.join(`lobby:${lobby.id}`);
 
       // Notify other players in the lobby
       client.to(`lobby:${lobby.id}`).emit('player_joined', {
@@ -80,7 +88,10 @@ export class BattleGateway implements OnGatewayConnection, OnGatewayDisconnect {
       return { event: 'lobby_joined', data: lobby };
     } catch (error) {
       this.logger.error('Join lobby error:', error);
-      return { event: 'battle_error', data: { code: 'JOIN_FAILED', message: 'Failed to join lobby' } };
+      return {
+        event: 'battle_error',
+        data: { code: 'JOIN_FAILED', message: 'Failed to join lobby' },
+      };
     }
   }
 
@@ -97,7 +108,7 @@ export class BattleGateway implements OnGatewayConnection, OnGatewayDisconnect {
       await this.battleService.leaveLobby(data.lobbyId, user.userId);
 
       // Leave the Socket.IO room
-      client.leave(`lobby:${data.lobbyId}`);
+      await client.leave(`lobby:${data.lobbyId}`);
 
       // Notify other players
       this.server.to(`lobby:${data.lobbyId}`).emit('player_left', {
@@ -108,7 +119,10 @@ export class BattleGateway implements OnGatewayConnection, OnGatewayDisconnect {
       return { event: 'left_lobby', data: { success: true } };
     } catch (error) {
       this.logger.error('Leave lobby error:', error);
-      return { event: 'battle_error', data: { code: 'LEAVE_FAILED', message: 'Failed to leave lobby' } };
+      return {
+        event: 'battle_error',
+        data: { code: 'LEAVE_FAILED', message: 'Failed to leave lobby' },
+      };
     }
   }
 
@@ -145,7 +159,10 @@ export class BattleGateway implements OnGatewayConnection, OnGatewayDisconnect {
       return { event: 'ready_updated', data: { success: true } };
     } catch (error) {
       this.logger.error('Player ready error:', error);
-      return { event: 'battle_error', data: { code: 'READY_FAILED', message: 'Failed to update ready state' } };
+      return {
+        event: 'battle_error',
+        data: { code: 'READY_FAILED', message: 'Failed to update ready state' },
+      };
     }
   }
 
@@ -153,7 +170,8 @@ export class BattleGateway implements OnGatewayConnection, OnGatewayDisconnect {
   @UseGuards(WsJwtGuard)
   async handleProgressUpdate(
     @ConnectedSocket() client: AuthenticatedSocket,
-    @MessageBody() data: {
+    @MessageBody()
+    data: {
       lobbyId: string;
       progress: number;
       correctCharacters: number;
@@ -186,7 +204,8 @@ export class BattleGateway implements OnGatewayConnection, OnGatewayDisconnect {
   @UseGuards(WsJwtGuard)
   async handleSubmitSolution(
     @ConnectedSocket() client: AuthenticatedSocket,
-    @MessageBody() data: { lobbyId: string; solution: string; timeElapsed: number },
+    @MessageBody()
+    data: { lobbyId: string; solution: string; timeElapsed: number },
   ) {
     try {
       const user = client.user;
@@ -209,10 +228,16 @@ export class BattleGateway implements OnGatewayConnection, OnGatewayDisconnect {
         });
       }
 
-      return { event: 'solution_submitted', data: { isCorrect: result.isCorrect } };
+      return {
+        event: 'solution_submitted',
+        data: { isCorrect: result.isCorrect },
+      };
     } catch (error) {
       this.logger.error('Submit solution error:', error);
-      return { event: 'battle_error', data: { code: 'SUBMIT_FAILED', message: 'Failed to submit solution' } };
+      return {
+        event: 'battle_error',
+        data: { code: 'SUBMIT_FAILED', message: 'Failed to submit solution' },
+      };
     }
   }
 }

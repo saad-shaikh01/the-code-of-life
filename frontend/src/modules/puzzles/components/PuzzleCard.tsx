@@ -1,12 +1,13 @@
 "use client";
 
-import * as React from "react";
 import Link from "next/link";
 import { motion } from "framer-motion";
 import { Lock, CheckCircle2, ChevronRight, Clock, Lightbulb } from "lucide-react";
 import { Card, Badge, Button } from "@/components/ui";
+import { getCipherPreviewTokens } from "@/lib/cipher";
 import { cn } from "@/lib/utils";
 import type { Puzzle, UserProgress } from "@/types/api.types";
+import { CipherTokenCell } from "./CipherTokenCell";
 
 interface PuzzleCardProps {
   puzzle: Puzzle;
@@ -17,6 +18,7 @@ interface PuzzleCardProps {
 
 export function PuzzleCard({ puzzle, progress, isLocked = false, index = 0 }: PuzzleCardProps) {
   const isCompleted = progress?.completed;
+  const preview = getCipherPreviewTokens(puzzle.encryptedPattern, 8);
 
   return (
     <motion.div
@@ -58,16 +60,17 @@ export function PuzzleCard({ puzzle, progress, isLocked = false, index = 0 }: Pu
             "py-3 text-center",
             isLocked ? "blur-sm" : ""
           )}>
-            <div className="flex flex-wrap justify-center gap-2 text-2xl font-mono">
-              {puzzle.encryptedPattern.slice(0, 15).split("").map((char, i) => (
-                <span
-                  key={i}
-                  className={char === " " ? "w-1" : "symbol-gold"}
-                >
-                  {isLocked ? "●" : char}
-                </span>
+            <div className="flex flex-wrap justify-center gap-2">
+              {preview.tokens.map((token, i) => (
+                <CipherTokenCell
+                  key={`${token || "gap"}-${i}`}
+                  token={token}
+                  hidden={isLocked}
+                  className="min-w-[2rem]"
+                  gapClassName="w-2"
+                />
               ))}
-              {puzzle.encryptedPattern.length > 15 && (
+              {preview.hasMore && (
                 <span className="text-muted-foreground">...</span>
               )}
             </div>
@@ -88,7 +91,7 @@ export function PuzzleCard({ puzzle, progress, isLocked = false, index = 0 }: Pu
               </div>
               <div className="flex items-center gap-1.5">
                 <Clock className="h-4 w-4" />
-                <span>{Math.floor(progress.timeSpent / 60)}:{(progress.timeSpent % 60).toString().padStart(2, '0')}</span>
+                <span>{Math.floor(progress.timeSpent / 60)}:{(progress.timeSpent % 60).toString().padStart(2, "0")}</span>
               </div>
               {progress.hintsUsed > 0 && (
                 <div className="flex items-center gap-1.5">

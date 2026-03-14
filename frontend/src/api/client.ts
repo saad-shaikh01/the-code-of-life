@@ -44,12 +44,67 @@ class ApiClient {
   }
 
   /**
+   * Check whether any auth token is available in storage
+   */
+  hasStoredSession(): boolean {
+    return Boolean(this.getAccessToken() || this.getRefreshToken());
+  }
+
+  /**
+   * Keep the middleware routing cookie in sync with client-side auth storage.
+   */
+  syncSessionCookie(): void {
+    if (!this.hasStoredSession()) {
+      this.clearSessionCookie();
+      return;
+    }
+
+    this.setSessionCookie();
+  }
+
+  private setSessionCookie(): void {
+    if (typeof document === 'undefined' || typeof window === 'undefined') return;
+
+    const cookieParts = [
+      `${AUTH_CONFIG.SESSION_COOKIE_NAME}=1`,
+      'Path=/',
+      `Max-Age=${AUTH_CONFIG.SESSION_COOKIE_MAX_AGE_SECONDS}`,
+      'SameSite=Lax',
+    ];
+
+    if (window.location.protocol === 'https:') {
+      cookieParts.push('Secure');
+    }
+
+    document.cookie = cookieParts.join('; ');
+  }
+
+  private clearSessionCookie(): void {
+    if (typeof document === 'undefined' || typeof window === 'undefined') return;
+
+    const cookieParts = [
+      `${AUTH_CONFIG.SESSION_COOKIE_NAME}=`,
+      'Path=/',
+      'Expires=Thu, 01 Jan 1970 00:00:00 GMT',
+      'Max-Age=0',
+      'SameSite=Lax',
+    ];
+
+    if (window.location.protocol === 'https:') {
+      cookieParts.push('Secure');
+    }
+
+    document.cookie = cookieParts.join('; ');
+  }
+
+  /**
    * Set tokens in storage
    */
   setTokens(accessToken: string, refreshToken: string): void {
     if (typeof window === 'undefined') return;
     localStorage.setItem(AUTH_CONFIG.ACCESS_TOKEN_KEY, accessToken);
     localStorage.setItem(AUTH_CONFIG.REFRESH_TOKEN_KEY, refreshToken);
+    this.setSessionCookie();
   }
 
   /**
@@ -60,6 +115,7 @@ class ApiClient {
     localStorage.removeItem(AUTH_CONFIG.ACCESS_TOKEN_KEY);
     localStorage.removeItem(AUTH_CONFIG.REFRESH_TOKEN_KEY);
     localStorage.removeItem(AUTH_CONFIG.USER_KEY);
+    this.clearSessionCookie();
   }
 
   /**

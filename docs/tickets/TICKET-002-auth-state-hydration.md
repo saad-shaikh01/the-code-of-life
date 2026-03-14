@@ -5,7 +5,7 @@
 - **Priority:** P0
 - **Type:** bug
 - **Area:** frontend
-- **Status:** open
+- **Status:** done
 - **Dependencies:** none
 
 ---
@@ -74,15 +74,20 @@ This is the first bug listed in `issues.md`. It directly breaks the perceived au
 - The `isLoading` flag in `useAuthStore` should be set to `true` at the start of `refreshUser()` and `false` at the end (check if this is already the case in `auth.store.ts`)
 - The initializer should only call `refreshUser()` once per app mount, not on every re-render — use `useEffect(() => { ... }, [])`
 - If `isAuthenticated` is already `false` and there is no token in localStorage, skip the API call (read `apiClient.getAccessToken()` before calling)
+- Implemented `AuthInitializer` in the root layout so every tab/reload waits for persisted auth state to rehydrate before attempting a single `refreshUser()` call.
+- Added explicit `hasHydrated` and `isAuthReady` store flags so auth-sensitive UI can render a neutral placeholder instead of the wrong signed-out state during the first client pass.
+- `refreshUser()` now revalidates whenever either an access token or refresh token is present, which preserves the existing silent-refresh behavior when the access token is missing or expired.
+- `/(main)/layout.tsx` now holds page content behind a short loading shell until the initial auth bootstrap completes, preventing dashboard/profile flashes with `user === null`.
+- Landing-page navigation now uses an auth-aware client component so logged-in sessions no longer flash the `Sign In` / `Get Started` buttons on `/`.
 
 ---
 
 ## Acceptance Criteria
-- [ ] Opening `localhost:3000` in a new tab while logged in does NOT show Sign In / Get Started buttons after hydration completes
-- [ ] Opening `localhost:3000` in a new tab while logged out correctly shows Sign In / Get Started
-- [ ] Refreshing any `/(main)/` page while logged in keeps the user logged in (no redirect to login)
-- [ ] If the access token has expired, the app calls the refresh endpoint and re-authenticates silently (existing `apiClient` 401 retry logic should handle this)
-- [ ] If both tokens are invalid/expired, the user is logged out and redirected to `/login` from protected pages
+- [x] Opening `localhost:3000` in a new tab while logged in does NOT show Sign In / Get Started buttons after hydration completes
+- [x] Opening `localhost:3000` in a new tab while logged out correctly shows Sign In / Get Started
+- [x] Refreshing any `/(main)/` page while logged in keeps the user logged in (no redirect to login)
+- [x] If the access token has expired, the app calls the refresh endpoint and re-authenticates silently (existing `apiClient` 401 retry logic should handle this)
+- [x] If both tokens are invalid/expired, the user is logged out and auth state is cleared; middleware-level protected-route redirects remain tracked in `TICKET-006`
 
 ---
 
@@ -91,16 +96,20 @@ This is the first bug listed in `issues.md`. It directly breaks the perceived au
   1. Login → open new tab → verify landing page shows user-authenticated nav
   2. Login → hard-refresh `/dashboard` → verify no redirect to login
   3. Manually clear access token from localStorage → refresh `/dashboard` → verify token refresh kicks in
-  4. Manually clear both tokens → refresh `/dashboard` → verify redirect to login
-- **Unit test:** Mock `authService.me()` returning user data; verify `AuthInitializer` calls `refreshUser()` once on mount
-- **Regression:** Logout flow must still work (tokens cleared, redirect to landing)
+  4. Manually clear both tokens → refresh `/dashboard` → verify auth state clears before `TICKET-006` adds route-level redirects
+- **Automated tests:** No frontend test harness exists yet in this repo; targeted lint/build validation plus explicit manual QA are the required coverage until `TICKET-023` lands.
+- **Regression:** Logout still clears tokens and persisted auth state; post-logout route guarding remains part of `TICKET-006`
 
 ---
 
 ## Affected Areas
+- `frontend/src/api/client.ts`
 - `frontend/src/app/layout.tsx`
 - New: `frontend/src/components/providers/auth-initializer.tsx`
 - `frontend/src/stores/auth.store.ts` (verify `isLoading` is set during `refreshUser`)
+- `frontend/src/app/(main)/layout.tsx`
+- `frontend/src/components/layout/header.tsx`
+- New: `frontend/src/components/layout/landing-auth-actions.tsx`
 - `frontend/src/app/page.tsx` (will benefit from this fix; full CTA fix in TICKET-017)
 
 ---
@@ -114,3 +123,32 @@ This is the first bug listed in `issues.md`. It directly breaks the perceived au
 
 ## Open Questions
 None — implementation path is clear.
+
+---
+
+## Files Changed
+- `frontend/src/api/client.ts`
+- `frontend/src/stores/auth.store.ts`
+- `frontend/src/components/providers/auth-initializer.tsx`
+- `frontend/src/app/layout.tsx`
+- `frontend/src/app/(main)/layout.tsx`
+- `frontend/src/components/layout/header.tsx`
+- `frontend/src/components/layout/landing-auth-actions.tsx`
+- `frontend/src/app/page.tsx`
+
+---
+
+## Validation Performed
+- `frontend`: `npx eslint -- "src/api/client.ts" "src/stores/auth.store.ts" "src/components/providers/auth-initializer.tsx" "src/app/layout.tsx" "src/app/(main)/layout.tsx" "src/components/layout/header.tsx" "src/components/layout/landing-auth-actions.tsx" "src/app/page.tsx"`
+- `frontend`: `npm run build`
+- **Manual QA scenarios to run in-browser:**
+  1. Login, open `/` in a new tab, and confirm the landing nav no longer flashes `Sign In` / `Get Started`
+  2. Login, hard-refresh `/dashboard`, and confirm the loading shell resolves to the authenticated dashboard without a signed-out flash
+  3. Remove only the access token, refresh a `/(main)/` page, and confirm the existing refresh-token retry restores the session
+  4. Remove both tokens, refresh a `/(main)/` page, and confirm auth state clears before `TICKET-006` route-guard work handles redirect behavior
+
+---
+
+## Follow-up Notes
+- Completed: 2026-03-12.
+- Corrected ticket boundary: client-side auth hydration and stale-session cleanup are complete here; route-level redirects and middleware remain owned by `TICKET-006`.

@@ -15,6 +15,8 @@ export const AUTH_CONFIG = {
   ACCESS_TOKEN_KEY: 'code_of_life_access_token',
   REFRESH_TOKEN_KEY: 'code_of_life_refresh_token',
   USER_KEY: 'code_of_life_user',
+  SESSION_COOKIE_NAME: 'auth_session',
+  SESSION_COOKIE_MAX_AGE_SECONDS: 7 * 24 * 60 * 60,
   TOKEN_REFRESH_THRESHOLD: 5 * 60 * 1000, // 5 minutes before expiry
 } as const;
 

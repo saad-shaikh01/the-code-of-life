@@ -1,64 +1,7 @@
 import { PrismaClient, GameMode, Difficulty } from '@prisma/client';
+import { encodeCipherText } from '@code-of-life/shared';
 
 const prisma = new PrismaClient();
-
-/**
- * Symbol map matching the DecoderService default mapping
- */
-const symbolMap: Record<string, string> = {
-  A: '☀',
-  B: '☽',
-  C: '★',
-  D: '♦',
-  E: '♥',
-  F: '♣',
-  G: '♠',
-  H: '◆',
-  I: '○',
-  J: '●',
-  K: '□',
-  L: '■',
-  M: '△',
-  N: '▽',
-  O: '◇',
-  P: '⬡',
-  Q: '⬢',
-  R: '✦',
-  S: '✧',
-  T: '⚡',
-  U: '☯',
-  V: '✿',
-  W: '❀',
-  X: '✵',
-  Y: '❂',
-  Z: '✡',
-  '1': '①',
-  '2': '②',
-  '3': '③',
-  '4': '④',
-  '5': '⑤',
-  '6': '⑥',
-  '7': '⑦',
-  '8': '⑧',
-  '9': '⑨',
-  '0': '⓪',
-  ' ': ' ',
-  '.': '.',
-  ',': ',',
-  '!': '!',
-  '?': '?',
-  "'": "'",
-  '-': '-',
-};
-
-/**
- * Encode text to symbols
- */
-function encode(text: string): string {
-  return [...text.toUpperCase()]
-    .map((char) => symbolMap[char] ?? char)
-    .join('');
-}
 
 interface PuzzleSeed {
   title: string;
@@ -314,9 +257,10 @@ const puzzles: PuzzleSeed[] = [
 async function main() {
   console.log('Starting seed...');
 
-  // Clear existing puzzles
+  // Reset progress first because it depends on seeded puzzle rows.
+  await prisma.userProgress.deleteMany();
   await prisma.puzzle.deleteMany();
-  console.log('Cleared existing puzzles');
+  console.log('Cleared existing user progress and puzzles');
 
   // Create puzzles with encoded patterns
   const today = new Date();
@@ -326,7 +270,7 @@ async function main() {
 
   for (let i = 0; i < puzzles.length; i++) {
     const puzzle = puzzles[i];
-    const encryptedPattern = encode(puzzle.originalReflection);
+    const encryptedPattern = encodeCipherText(puzzle.originalReflection).output;
 
     // For DAILY mode, schedule for upcoming days
     let scheduledDate: Date | null = null;
@@ -359,6 +303,21 @@ async function main() {
   console.log('- STORY mode: 15 puzzles');
   console.log('- CHALLENGE mode: 5 puzzles');
   console.log('- DAILY mode: 5 puzzles (scheduled for next 5 days)');
+
+  const persistedPuzzles = await prisma.puzzle.findMany({
+    select: { encryptedPattern: true },
+  });
+  const invalidPatterns = persistedPuzzles.filter(
+    ({ encryptedPattern }) => !/^[0-9 ]+$/.test(encryptedPattern),
+  );
+
+  if (persistedPuzzles.length !== puzzles.length || invalidPatterns.length > 0) {
+    throw new Error(
+      `Seed verification failed. Expected ${puzzles.length} numeric patterns, found ${persistedPuzzles.length} rows and ${invalidPatterns.length} invalid patterns.`,
+    );
+  }
+
+  console.log('Verified all seeded puzzle patterns are numeric.');
 }
 
 main()

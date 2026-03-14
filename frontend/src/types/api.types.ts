@@ -10,8 +10,8 @@
 // Common Types
 // ============================================
 
-export type GameMode = 'STORY' | 'CHALLENGE' | 'DAILY';
-export type Difficulty = 'BEGINNER' | 'INTERMEDIATE' | 'ADVANCED' | 'MASTER';
+export type GameMode = "STORY" | "CHALLENGE" | "DAILY";
+export type Difficulty = "BEGINNER" | "INTERMEDIATE" | "ADVANCED" | "MASTER";
 
 export interface ApiResponse<T> {
   success: boolean;
@@ -81,6 +81,19 @@ export interface LoginInput {
 
 export interface ChangePasswordInput {
   currentPassword: string;
+  newPassword: string;
+}
+
+export interface ForgotPasswordInput {
+  email: string;
+}
+
+export interface ForgotPasswordResponse {
+  token: string | null;
+}
+
+export interface ResetPasswordInput {
+  token: string;
   newPassword: string;
 }
 
@@ -228,15 +241,15 @@ export interface UpdateProfileInput {
 // ============================================
 
 export type AchievementCriteriaType =
-  | 'PUZZLES_COMPLETED'
-  | 'SCORE_REACHED'
-  | 'STREAK_DAYS'
-  | 'MODE_COMPLETED'
-  | 'PERFECT_SCORE'
-  | 'SPEED_RUN'
-  | 'NO_HINTS'
-  | 'FIRST_PUZZLE'
-  | 'DAILY_STREAK';
+  | "PUZZLES_COMPLETED"
+  | "SCORE_REACHED"
+  | "STREAK_DAYS"
+  | "MODE_COMPLETED"
+  | "PERFECT_SCORE"
+  | "SPEED_RUN"
+  | "NO_HINTS"
+  | "FIRST_PUZZLE"
+  | "DAILY_STREAK";
 
 export interface AchievementCriteria {
   type: AchievementCriteriaType;
@@ -275,7 +288,7 @@ export interface AchievementProgress {
 // Leaderboard Types
 // ============================================
 
-export type LeaderboardPeriod = 'all' | 'monthly' | 'weekly' | 'daily';
+export type LeaderboardPeriod = "all" | "monthly" | "weekly" | "daily";
 
 export interface LeaderboardEntry {
   rank: number;

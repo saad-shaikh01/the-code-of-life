@@ -2,10 +2,10 @@ import { Test, TestingModule } from '@nestjs/testing';
 import { ProgressService } from './progress.service';
 import { PrismaService } from '../../prisma';
 import { NotFoundException } from '@nestjs/common';
+import { UsersService } from '../users';
 
 describe('ProgressService', () => {
   let service: ProgressService;
-  let prisma: PrismaService;
 
   const mockPrismaService = {
     puzzle: {
@@ -25,6 +25,9 @@ describe('ProgressService', () => {
       update: jest.fn(),
     },
   };
+  const mockUsersService = {
+    updateStreak: jest.fn(),
+  };
 
   beforeEach(async () => {
     const module: TestingModule = await Test.createTestingModule({
@@ -34,14 +37,18 @@ describe('ProgressService', () => {
           provide: PrismaService,
           useValue: mockPrismaService,
         },
+        {
+          provide: UsersService,
+          useValue: mockUsersService,
+        },
       ],
     }).compile();
 
     service = module.get<ProgressService>(ProgressService);
-    prisma = module.get<PrismaService>(PrismaService);
 
     // Clear all mocks before each test
     jest.clearAllMocks();
+    mockUsersService.updateStreak.mockResolvedValue(1);
   });
 
   it('should be defined', () => {
@@ -87,8 +94,6 @@ describe('ProgressService', () => {
         id: userId,
         totalScore: 0,
         currentLevel: 1,
-        lastPlayedAt: null,
-        streakDays: 0,
       });
       mockPrismaService.userProgress.count.mockResolvedValue(1);
       mockPrismaService.user.update.mockResolvedValue({});
@@ -107,6 +112,7 @@ describe('ProgressService', () => {
           hintsUsed: 0,
         },
       });
+      expect(mockUsersService.updateStreak).toHaveBeenCalledWith(userId);
     });
 
     it('should update existing progress with higher score', async () => {
@@ -137,8 +143,6 @@ describe('ProgressService', () => {
         id: userId,
         totalScore: 50,
         currentLevel: 1,
-        lastPlayedAt: null,
-        streakDays: 0,
       });
       mockPrismaService.userProgress.count.mockResolvedValue(1);
       mockPrismaService.user.update.mockResolvedValue({});
@@ -147,6 +151,7 @@ describe('ProgressService', () => {
 
       expect(result).toEqual(updatedProgress);
       expect(mockPrismaService.userProgress.update).toHaveBeenCalled();
+      expect(mockUsersService.updateStreak).toHaveBeenCalledWith(userId);
     });
 
     it('should not update if new score is lower and already completed', async () => {
@@ -169,10 +174,11 @@ describe('ProgressService', () => {
 
       expect(result).toEqual(existingProgress);
       expect(mockPrismaService.userProgress.update).not.toHaveBeenCalled();
+      expect(mockUsersService.updateStreak).not.toHaveBeenCalled();
     });
   });
 
-  describe('Streak Logic - 24-Hour Reset', () => {
+  describe('streak delegation', () => {
     const userId = 'user-123';
     const puzzleId = 'puzzle-123';
 
@@ -192,20 +198,13 @@ describe('ProgressService', () => {
       mockPrismaService.userProgress.count.mockResolvedValue(1);
     });
 
-    it('should set streak to 1 for first puzzle', async () => {
+    it('calls usersService.updateStreak when a new completed progress entry is created', async () => {
       mockPrismaService.user.findUnique.mockResolvedValue({
         id: userId,
         totalScore: 0,
         currentLevel: 1,
-        lastPlayedAt: null,
-        streakDays: 0,
       });
-
-      let capturedStreakDays: number | undefined;
-      mockPrismaService.user.update.mockImplementation((args) => {
-        capturedStreakDays = args.data.streakDays;
-        return Promise.resolve({});
-      });
+      mockPrismaService.user.update.mockResolvedValue({});
 
       await service.submitProgress(userId, {
         puzzleId,
@@ -215,26 +214,36 @@ describe('ProgressService', () => {
         hintsUsed: 0,
       });
 
-      expect(capturedStreakDays).toBe(1);
+      expect(mockUsersService.updateStreak).toHaveBeenCalledWith(userId);
     });
 
-    it('should increment streak if within 24 hours', async () => {
-      const now = new Date();
-      const lastPlayed = new Date(now.getTime() - 12 * 60 * 60 * 1000); // 12 hours ago
-
+    it('calls usersService.updateStreak when an existing incomplete progress becomes completed', async () => {
+      mockPrismaService.userProgress.findUnique.mockResolvedValue({
+        id: 'progress-123',
+        userId,
+        puzzleId,
+        completed: false,
+        completedAt: null,
+        score: 10,
+        timeSpent: 120,
+        hintsUsed: 2,
+      });
+      mockPrismaService.userProgress.update.mockResolvedValue({
+        id: 'progress-123',
+        userId,
+        puzzleId,
+        completed: true,
+        completedAt: new Date(),
+        score: 100,
+        timeSpent: 300,
+        hintsUsed: 0,
+      });
       mockPrismaService.user.findUnique.mockResolvedValue({
         id: userId,
         totalScore: 100,
         currentLevel: 1,
-        lastPlayedAt: lastPlayed,
-        streakDays: 5,
       });
-
-      let capturedStreakDays: number | undefined;
-      mockPrismaService.user.update.mockImplementation((args) => {
-        capturedStreakDays = args.data.streakDays;
-        return Promise.resolve({});
-      });
+      mockPrismaService.user.update.mockResolvedValue({});
 
       await service.submitProgress(userId, {
         puzzleId,
@@ -244,28 +253,22 @@ describe('ProgressService', () => {
         hintsUsed: 0,
       });
 
-      expect(capturedStreakDays).toBe(6);
+      expect(mockUsersService.updateStreak).toHaveBeenCalledWith(userId);
     });
 
-    it('should keep incrementing for multiple completions within 24h', async () => {
-      const now = new Date();
-      const lastPlayed = new Date(now.getTime() - 1 * 60 * 60 * 1000); // 1 hour ago
-
-      mockPrismaService.user.findUnique.mockResolvedValue({
-        id: userId,
-        totalScore: 200,
-        currentLevel: 2,
-        lastPlayedAt: lastPlayed,
-        streakDays: 10,
+    it('does not call usersService.updateStreak when the completed progress record is unchanged', async () => {
+      mockPrismaService.userProgress.findUnique.mockResolvedValue({
+        id: 'progress-123',
+        userId,
+        puzzleId,
+        completed: true,
+        completedAt: new Date(),
+        score: 150,
+        timeSpent: 200,
+        hintsUsed: 0,
       });
 
-      let capturedStreakDays: number | undefined;
-      mockPrismaService.user.update.mockImplementation((args) => {
-        capturedStreakDays = args.data.streakDays;
-        return Promise.resolve({});
-      });
-
-      await service.submitProgress(userId, {
+      const result = await service.submitProgress(userId, {
         puzzleId,
         completed: true,
         score: 100,
@@ -273,95 +276,17 @@ describe('ProgressService', () => {
         hintsUsed: 0,
       });
 
-      expect(capturedStreakDays).toBe(11);
-    });
-
-    it('should reset to 1 if >24 hours elapsed', async () => {
-      const now = new Date();
-      const lastPlayed = new Date(now.getTime() - 25 * 60 * 60 * 1000); // 25 hours ago
-
-      mockPrismaService.user.findUnique.mockResolvedValue({
-        id: userId,
-        totalScore: 500,
-        currentLevel: 5,
-        lastPlayedAt: lastPlayed,
-        streakDays: 15,
-      });
-
-      let capturedStreakDays: number | undefined;
-      mockPrismaService.user.update.mockImplementation((args) => {
-        capturedStreakDays = args.data.streakDays;
-        return Promise.resolve({});
-      });
-
-      await service.submitProgress(userId, {
+      expect(result).toEqual({
+        id: 'progress-123',
+        userId,
         puzzleId,
         completed: true,
-        score: 100,
-        timeSpent: 300,
+        completedAt: expect.any(Date),
+        score: 150,
+        timeSpent: 200,
         hintsUsed: 0,
       });
-
-      expect(capturedStreakDays).toBe(1);
-    });
-
-    it('should handle exactly 24h boundary (should increment)', async () => {
-      const now = new Date();
-      const lastPlayed = new Date(now.getTime() - 24 * 60 * 60 * 1000); // Exactly 24 hours
-
-      mockPrismaService.user.findUnique.mockResolvedValue({
-        id: userId,
-        totalScore: 300,
-        currentLevel: 3,
-        lastPlayedAt: lastPlayed,
-        streakDays: 7,
-      });
-
-      let capturedStreakDays: number | undefined;
-      mockPrismaService.user.update.mockImplementation((args) => {
-        capturedStreakDays = args.data.streakDays;
-        return Promise.resolve({});
-      });
-
-      await service.submitProgress(userId, {
-        puzzleId,
-        completed: true,
-        score: 100,
-        timeSpent: 300,
-        hintsUsed: 0,
-      });
-
-      // At exactly 24h, it should still increment (not >24)
-      expect(capturedStreakDays).toBe(8);
-    });
-
-    it('should reset to 1 if 48 hours elapsed', async () => {
-      const now = new Date();
-      const lastPlayed = new Date(now.getTime() - 48 * 60 * 60 * 1000); // 48 hours ago
-
-      mockPrismaService.user.findUnique.mockResolvedValue({
-        id: userId,
-        totalScore: 600,
-        currentLevel: 6,
-        lastPlayedAt: lastPlayed,
-        streakDays: 20,
-      });
-
-      let capturedStreakDays: number | undefined;
-      mockPrismaService.user.update.mockImplementation((args) => {
-        capturedStreakDays = args.data.streakDays;
-        return Promise.resolve({});
-      });
-
-      await service.submitProgress(userId, {
-        puzzleId,
-        completed: true,
-        score: 100,
-        timeSpent: 300,
-        hintsUsed: 0,
-      });
-
-      expect(capturedStreakDays).toBe(1);
+      expect(mockUsersService.updateStreak).not.toHaveBeenCalled();
     });
   });
 

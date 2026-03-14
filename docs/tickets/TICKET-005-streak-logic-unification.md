@@ -5,7 +5,7 @@
 - **Priority:** P1
 - **Type:** bug
 - **Area:** backend
-- **Status:** open
+- **Status:** done
 - **Dependencies:** TICKET-004 (streak product rules must be defined first)
 
 ---
@@ -93,18 +93,24 @@ async updateStreak(userId: string): Promise<void> {
 ---
 
 ## Implementation Notes
-- Inject `UsersService` into `ProgressService` (or use Prisma directly in a shared utility)
-- Be careful of circular dependency: if `ProgressService` already imports `UsersService`, it's fine; if not, confirm NestJS module exports allow this
-- After the change, search for any remaining direct `streakDays` updates outside this function and remove them
+- Removed the `AuthService.login()` write to `lastPlayedAt`. Login is not a qualifying completion and must not influence streak calculations.
+- `UsersService.updateStreak()` is now the canonical UTC-based implementation:
+  - compares UTC calendar dates via `getUTCFullYear()/getUTCMonth()/getUTCDate()`
+  - keeps same-day completions idempotent while still updating `lastPlayedAt` to the latest completion time
+  - increments on the next UTC day
+  - resets to `1` after a gap of 2 or more UTC calendar days
+- `ProgressService.updateUserStats()` no longer calculates streaks. It updates score/level, then delegates streak handling to `usersService.updateStreak(userId)`.
+- `ProgressModule` now imports `UsersModule` so Nest can inject `UsersService`.
+- Verified by code search that `lastPlayedAt` is now only written in `UsersService.updateStreak()` within application code.
 
 ---
 
 ## Acceptance Criteria
-- [ ] Only one streak calculation function exists in the entire backend codebase
-- [ ] `progress.service.ts` calls `usersService.updateStreak()` instead of inline logic
-- [ ] Streak increments correctly when consecutive days are played
-- [ ] Streak resets to 1 (not 0) when a day is missed
-- [ ] Playing multiple puzzles in one day only increments streak once
+- [x] Only one streak calculation function exists in the entire backend codebase
+- [x] `progress.service.ts` calls `usersService.updateStreak()` instead of inline logic
+- [x] Streak increments correctly when consecutive days are played
+- [x] Streak resets to 1 (not 0) when a day is missed
+- [x] Playing multiple puzzles in one day only increments streak once
 
 ---
 
@@ -119,10 +125,13 @@ async updateStreak(userId: string): Promise<void> {
 ---
 
 ## Affected Areas
+- `backend/src/modules/auth/auth.service.ts`
 - `backend/src/modules/users/users.service.ts`
+- `backend/src/modules/users/users.service.spec.ts`
 - `backend/src/modules/progress/progress.service.ts`
-- `backend/src/modules/users/users.module.ts` (ensure UsersService is exported)
-- `backend/src/modules/progress/progress.module.ts` (import UsersModule if needed)
+- `backend/src/modules/progress/progress.module.ts`
+- `backend/src/modules/progress/progress.service.spec.ts`
+- `backend/src/modules/progress/progress.streak.integration.spec.ts`
 
 ---
 
@@ -134,3 +143,30 @@ async updateStreak(userId: string): Promise<void> {
 
 ## Open Questions
 None after TICKET-004 is resolved.
+
+---
+
+## Files Changed
+- `backend/src/modules/auth/auth.service.ts`
+- `backend/src/modules/users/users.service.ts`
+- `backend/src/modules/users/users.service.spec.ts`
+- `backend/src/modules/progress/progress.service.ts`
+- `backend/src/modules/progress/progress.module.ts`
+- `backend/src/modules/progress/progress.service.spec.ts`
+- `backend/src/modules/progress/progress.streak.integration.spec.ts`
+- `docs/tickets/TICKET-005-streak-logic-unification.md`
+- `docs/tickets/README.md`
+
+---
+
+## Validation Performed
+- `backend`: `npm run test -- users.service.spec.ts progress.service.spec.ts progress.streak.integration.spec.ts`
+- `backend`: `npm run test`
+- `backend`: `npm run build`
+- Code search: verified application writes to `lastPlayedAt` now exist only in `backend/src/modules/users/users.service.ts`
+
+---
+
+## Follow-up Notes
+- Completed: 2026-03-13.
+- `resetProgress()` still clears `streakDays` explicitly when wiping all user progress; that is a reset operation, not a competing streak-calculation path.

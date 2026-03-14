@@ -19,7 +19,7 @@ import {
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useAuthStore } from "@/stores";
-import { Button, Avatar, Dropdown, DropdownTrigger, DropdownContent, DropdownItem, DropdownSeparator } from "@/components/ui";
+import { Button, Avatar, Dropdown, DropdownTrigger, DropdownContent, DropdownItem, DropdownSeparator, Skeleton } from "@/components/ui";
 
 const navLinks = [
   { href: "/dashboard", label: "Dashboard", icon: BookOpen },
@@ -32,7 +32,8 @@ const navLinks = [
 export function Header() {
   const pathname = usePathname();
   const [mobileMenuOpen, setMobileMenuOpen] = React.useState(false);
-  const { user, isAuthenticated, logout } = useAuthStore();
+  const { user, isAuthenticated, logout, hasHydrated, isAuthReady } = useAuthStore();
+  const isAuthPending = !hasHydrated || !isAuthReady;
 
   return (
     <header className="sticky top-0 z-20 w-full border-b border-white/10 bg-background/80 backdrop-blur-lg">
@@ -82,7 +83,12 @@ export function Header() {
 
           {/* User Menu or Auth Buttons */}
           <div className="flex items-center gap-4">
-            {isAuthenticated && user ? (
+            {isAuthPending ? (
+              <div className="flex items-center gap-2">
+                <Skeleton className="h-9 w-20 rounded-lg" />
+                <Skeleton className="h-9 w-24 rounded-lg" />
+              </div>
+            ) : isAuthenticated && user ? (
               <>
                 {/* Streak Display */}
                 {user.streakDays > 0 && (

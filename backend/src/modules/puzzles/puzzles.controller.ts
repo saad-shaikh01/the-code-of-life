@@ -162,7 +162,9 @@ export class DecoderController {
 
   @Post('decode')
   @HttpCode(HttpStatus.OK)
-  @ApiOperation({ summary: 'Decode an encrypted pattern to readable text' })
+  @ApiOperation({
+    summary: 'Decode a numeric encrypted pattern to readable text',
+  })
   @ApiResponse({
     status: 200,
     description: 'Returns decoded text with statistics',
@@ -180,7 +182,7 @@ export class DecoderController {
 
   @Post('encode')
   @HttpCode(HttpStatus.OK)
-  @ApiOperation({ summary: 'Encode plain text to symbols' })
+  @ApiOperation({ summary: 'Encode plain text to numeric cipher tokens' })
   @ApiResponse({
     status: 200,
     description: 'Returns encoded pattern with statistics',
@@ -231,10 +233,10 @@ export class DecoderController {
   }
 
   @Get('symbol-map')
-  @ApiOperation({ summary: 'Get the default symbol mapping' })
+  @ApiOperation({ summary: 'Get the default numeric token mapping' })
   @ApiResponse({
     status: 200,
-    description: 'Returns the default symbol-to-text mapping',
+    description: 'Returns the default numeric-token-to-text mapping',
   })
   getSymbolMap(): ApiResponseDto<Record<string, string>> {
     const symbolMap = this.decoderService.getDefaultSymbolMap();

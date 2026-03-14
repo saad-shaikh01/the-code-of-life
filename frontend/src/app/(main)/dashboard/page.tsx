@@ -4,6 +4,7 @@ import * as React from "react";
 import Link from "next/link";
 import { motion } from "framer-motion";
 import {
+  AlertCircle,
   Calendar,
   BookOpen,
   Swords,
@@ -20,10 +21,21 @@ import {
   Sparkles,
 } from "lucide-react";
 import { useAuthStore } from "@/stores";
-import { useDailyPuzzle, useUserProgress, useUserAchievements } from "@/hooks";
+import { useDailyPuzzle, useUserAchievements, useUserProgress } from "@/hooks";
 import { PageHeader } from "@/components/layout";
-import { Button, Card, CardHeader, CardTitle, CardContent, Badge, Progress, Skeleton } from "@/components/ui";
+import {
+  Button,
+  Card,
+  CardHeader,
+  CardTitle,
+  CardContent,
+  Badge,
+  Progress,
+  Skeleton,
+} from "@/components/ui";
+import { getCipherPreviewTokens } from "@/lib/cipher";
 import { cn } from "@/lib/utils";
+import { CipherTokenCell } from "@/modules/puzzles/components/CipherTokenCell";
 
 const containerVariants = {
   hidden: { opacity: 0 },
@@ -40,19 +52,39 @@ const itemVariants = {
 
 export default function DashboardPage() {
   const { user } = useAuthStore();
-  const { data: dailyPuzzle, isLoading: dailyLoading } = useDailyPuzzle();
+  const {
+    data: dailyPuzzle,
+    isLoading: dailyLoading,
+    error: dailyPuzzleError,
+    isLocked: dailyPuzzleLocked,
+  } = useDailyPuzzle();
+  const { data: achievementsData, isLoading: achievementsLoading } =
+    useUserAchievements();
   const { data: progressData, isLoading: progressLoading } = useUserProgress();
+  const dailyPreview = dailyPuzzle?.data
+    ? getCipherPreviewTokens(dailyPuzzle.data.encryptedPattern, 10)
+    : null;
+  const achievements = achievementsData?.data || [];
+  const unlockedAchievements = achievements.filter(
+    (achievement) => achievement.isUnlocked,
+  );
+  const unlockedCount = unlockedAchievements.length;
+  const totalCount = achievements.length;
 
   // Calculate stats from progress data
   const stats = React.useMemo(() => {
     if (!progressData?.data) return null;
-    const completed = progressData.data.filter(p => p.completed);
+    const completed = progressData.data.filter((p) => p.completed);
     return {
       totalCompleted: completed.length,
       totalScore: completed.reduce((sum, p) => sum + p.score, 0),
-      averageTime: completed.length > 0
-        ? Math.round(completed.reduce((sum, p) => sum + p.timeSpent, 0) / completed.length)
-        : 0,
+      averageTime:
+        completed.length > 0
+          ? Math.round(
+              completed.reduce((sum, p) => sum + p.timeSpent, 0) /
+                completed.length,
+            )
+          : 0,
     };
   }, [progressData]);
 
@@ -69,7 +101,9 @@ export default function DashboardPage() {
       const minutes = Math.floor((diff % (1000 * 60 * 60)) / (1000 * 60));
       const seconds = Math.floor((diff % (1000 * 60)) / 1000);
 
-      setTimeUntilReset(`${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`);
+      setTimeUntilReset(
+        `${hours.toString().padStart(2, "0")}:${minutes.toString().padStart(2, "0")}:${seconds.toString().padStart(2, "0")}`,
+      );
     };
 
     updateCountdown();
@@ -85,11 +119,7 @@ export default function DashboardPage() {
   }, []);
 
   return (
-    <motion.div
-      variants={containerVariants}
-      initial="hidden"
-      animate="show"
-    >
+    <motion.div variants={containerVariants} initial="hidden" animate="show">
       <PageHeader
         title={`${greeting}, ${user?.username || "Explorer"}!`}
         subtitle="Ready to decode some wisdom today?"
@@ -108,7 +138,9 @@ export default function DashboardPage() {
                       <Calendar className="h-5 w-5 text-cyan-400" />
                     </div>
                     <div>
-                      <h3 className="font-semibold text-foreground">Today&apos;s Puzzle</h3>
+                      <h3 className="font-semibold text-foreground">
+                        Today&apos;s Puzzle
+                      </h3>
                       <p className="text-sm text-muted-foreground">
                         Resets in {timeUntilReset}
                       </p>
@@ -132,22 +164,25 @@ export default function DashboardPage() {
                 ) : dailyPuzzle?.data ? (
                   <>
                     <div className="mb-4">
-                      <div className="flex flex-wrap gap-4 mb-4 text-4xl font-mono justify-center py-4">
-                        {dailyPuzzle.data.encryptedPattern.slice(0, 20).split("").map((char, i) => (
-                          <span
-                            key={i}
-                            className={char === " " ? "w-2" : "symbol-gold animate-glow-pulse"}
-                          >
-                            {char}
-                          </span>
+                      <div className="flex flex-wrap gap-3 mb-4 justify-center py-4">
+                        {dailyPreview?.tokens.map((token, i) => (
+                          <CipherTokenCell
+                            key={`${token || "gap"}-${i}`}
+                            token={token}
+                            className="min-w-[2.4rem] md:min-w-[2.75rem] md:text-base"
+                            gapClassName="w-3"
+                          />
                         ))}
-                        {dailyPuzzle.data.encryptedPattern.length > 20 && (
+                        {dailyPreview?.hasMore && (
                           <span className="text-muted-foreground">...</span>
                         )}
                       </div>
                       <div className="flex items-center gap-2 justify-center">
                         <Badge variant="gameMode" gameMode="DAILY" />
-                        <Badge variant="difficulty" difficulty={dailyPuzzle.data.difficulty} />
+                        <Badge
+                          variant="difficulty"
+                          difficulty={dailyPuzzle.data.difficulty}
+                        />
                       </div>
                     </div>
                     <Link href={`/puzzle/${dailyPuzzle.data.id}`}>
@@ -157,7 +192,20 @@ export default function DashboardPage() {
                       </Button>
                     </Link>
                   </>
-                ) : (
+                ) : dailyPuzzleError ? (
+                  <div className="text-center py-12">
+                    <div className="max-w-md mx-auto rounded-2xl border border-red-500/20 bg-red-500/10 p-8">
+                      <AlertCircle className="h-8 w-8 mx-auto text-red-400 mb-4" />
+                      <h3 className="text-xl font-bold mb-2">
+                        Unable to Load Today&apos;s Puzzle
+                      </h3>
+                      <p className="text-muted-foreground">
+                        {dailyPuzzleError.message ||
+                          "Please try again in a moment."}
+                      </p>
+                    </div>
+                  </div>
+                ) : dailyPuzzleLocked ? (
                   <div className="text-center py-12">
                     <div className="max-w-md mx-auto">
                       <motion.div
@@ -174,22 +222,27 @@ export default function DashboardPage() {
                             <Lock className="h-8 w-8 text-amber-400" />
                           </div>
 
-                          <h3 className="text-xl font-bold mb-2">Unlock Daily Puzzles</h3>
+                          <h3 className="text-xl font-bold mb-2">
+                            Unlock Daily Puzzles
+                          </h3>
                           <p className="text-muted-foreground mb-6">
-                            Upgrade to PRO to access daily challenges and maintain your streak!
+                            Upgrade to PRO to access daily challenges and
+                            maintain your streak!
                           </p>
 
                           {/* Benefits */}
                           <div className="space-y-2 mb-6 text-left">
                             {[
-                              'Unlimited daily puzzles',
-                              'Priority hints system',
-                              'Track your streak',
-                              '7-day free trial'
+                              "Unlimited daily puzzles",
+                              "Priority hints system",
+                              "Track your streak",
+                              "7-day free trial",
                             ].map((benefit, i) => (
                               <div key={i} className="flex items-center gap-2">
                                 <CheckCircle2 className="h-4 w-4 text-emerald-400" />
-                                <span className="text-sm text-foreground">{benefit}</span>
+                                <span className="text-sm text-foreground">
+                                  {benefit}
+                                </span>
                               </div>
                             ))}
                           </div>
@@ -209,6 +262,19 @@ export default function DashboardPage() {
                       </motion.div>
                     </div>
                   </div>
+                ) : (
+                  <div className="text-center py-12">
+                    <div className="max-w-md mx-auto rounded-2xl border border-cyan-500/20 bg-cyan-500/10 p-8">
+                      <Calendar className="h-8 w-8 mx-auto text-cyan-400 mb-4" />
+                      <h3 className="text-xl font-bold mb-2">
+                        No Daily Puzzle Available
+                      </h3>
+                      <p className="text-muted-foreground">
+                        There isn&apos;t a daily challenge available right now.
+                        Check back later.
+                      </p>
+                    </div>
+                  </div>
                 )}
               </div>
             </Card>
@@ -219,9 +285,27 @@ export default function DashboardPage() {
             <h3 className="text-lg font-semibold mb-4">Quick Play</h3>
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
               {[
-                { href: "/story", icon: BookOpen, label: "Story Mode", desc: "Continue your journey", color: "violet" },
-                { href: "/challenge", icon: Swords, label: "Challenge", desc: "Test your skills", color: "rose" },
-                { href: "/leaderboards", icon: Trophy, label: "Leaderboards", desc: "See rankings", color: "amber" },
+                {
+                  href: "/story",
+                  icon: BookOpen,
+                  label: "Story Mode",
+                  desc: "Continue your journey",
+                  color: "violet",
+                },
+                {
+                  href: "/challenge",
+                  icon: Swords,
+                  label: "Challenge",
+                  desc: "Test your skills",
+                  color: "rose",
+                },
+                {
+                  href: "/leaderboards",
+                  icon: Trophy,
+                  label: "Leaderboards",
+                  desc: "See rankings",
+                  color: "amber",
+                },
               ].map((action) => {
                 const Icon = action.icon;
                 return (
@@ -231,9 +315,12 @@ export default function DashboardPage() {
                         <div
                           className={cn(
                             "p-2 rounded-lg w-fit mb-3",
-                            action.color === "violet" && "bg-violet-500/20 text-violet-400",
-                            action.color === "rose" && "bg-rose-500/20 text-rose-400",
-                            action.color === "amber" && "bg-amber-500/20 text-amber-400"
+                            action.color === "violet" &&
+                              "bg-violet-500/20 text-violet-400",
+                            action.color === "rose" &&
+                              "bg-rose-500/20 text-rose-400",
+                            action.color === "amber" &&
+                              "bg-amber-500/20 text-amber-400",
                           )}
                         >
                           <Icon className="h-5 w-5" />
@@ -241,7 +328,9 @@ export default function DashboardPage() {
                         <p className="font-medium text-foreground group-hover:text-amber-400 transition-colors">
                           {action.label}
                         </p>
-                        <p className="text-sm text-muted-foreground">{action.desc}</p>
+                        <p className="text-sm text-muted-foreground">
+                          {action.desc}
+                        </p>
                       </CardContent>
                     </Card>
                   </Link>
@@ -273,20 +362,28 @@ export default function DashboardPage() {
                         key={progress.id}
                         className={cn(
                           "flex items-center justify-between p-3 rounded-lg",
-                          "bg-white/5 border border-white/5"
+                          "bg-white/5 border border-white/5",
                         )}
                       >
                         <div className="flex items-center gap-3">
-                          <div className={cn(
-                            "h-8 w-8 rounded-lg flex items-center justify-center text-sm font-medium",
-                            progress.completed ? "bg-emerald-500/20 text-emerald-400" : "bg-white/10 text-muted-foreground"
-                          )}>
+                          <div
+                            className={cn(
+                              "h-8 w-8 rounded-lg flex items-center justify-center text-sm font-medium",
+                              progress.completed
+                                ? "bg-emerald-500/20 text-emerald-400"
+                                : "bg-white/10 text-muted-foreground",
+                            )}
+                          >
                             {progress.completed ? "✓" : i + 1}
                           </div>
                           <div>
-                            <p className="font-medium text-foreground">Puzzle #{progress.puzzleId.slice(0, 8)}</p>
+                            <p className="font-medium text-foreground">
+                              Puzzle #{progress.puzzleId.slice(0, 8)}
+                            </p>
                             <p className="text-xs text-muted-foreground">
-                              {progress.completed ? `Completed · ${progress.score} points` : "In progress"}
+                              {progress.completed
+                                ? `Completed · ${progress.score} points`
+                                : "In progress"}
                             </p>
                           </div>
                         </div>
@@ -300,7 +397,9 @@ export default function DashboardPage() {
                   </div>
                 ) : (
                   <div className="text-center py-8">
-                    <p className="text-muted-foreground">No activity yet. Start solving puzzles!</p>
+                    <p className="text-muted-foreground">
+                      No activity yet. Start solving puzzles!
+                    </p>
                   </div>
                 )}
               </CardContent>
@@ -331,23 +430,33 @@ export default function DashboardPage() {
                     <div className="flex items-center justify-between p-3 rounded-lg bg-amber-500/10 border border-amber-500/20">
                       <div className="flex items-center gap-3">
                         <Trophy className="h-5 w-5 text-amber-400" />
-                        <span className="text-muted-foreground">Total Score</span>
+                        <span className="text-muted-foreground">
+                          Total Score
+                        </span>
                       </div>
-                      <span className="font-bold text-amber-400">{user?.totalScore?.toLocaleString() || 0}</span>
+                      <span className="font-bold text-amber-400">
+                        {user?.totalScore?.toLocaleString() || 0}
+                      </span>
                     </div>
                     <div className="flex items-center justify-between p-3 rounded-lg bg-violet-500/10 border border-violet-500/20">
                       <div className="flex items-center gap-3">
                         <Star className="h-5 w-5 text-violet-400" />
                         <span className="text-muted-foreground">Level</span>
                       </div>
-                      <span className="font-bold text-violet-400">{user?.currentLevel || 1}</span>
+                      <span className="font-bold text-violet-400">
+                        {user?.currentLevel || 1}
+                      </span>
                     </div>
                     <div className="flex items-center justify-between p-3 rounded-lg bg-emerald-500/10 border border-emerald-500/20">
                       <div className="flex items-center gap-3">
                         <Target className="h-5 w-5 text-emerald-400" />
-                        <span className="text-muted-foreground">Puzzles Solved</span>
+                        <span className="text-muted-foreground">
+                          Puzzles Solved
+                        </span>
                       </div>
-                      <span className="font-bold text-emerald-400">{stats?.totalCompleted || 0}</span>
+                      <span className="font-bold text-emerald-400">
+                        {stats?.totalCompleted || 0}
+                      </span>
                     </div>
                   </>
                 )}
@@ -371,7 +480,7 @@ export default function DashboardPage() {
                   </span>
                 </div>
                 <Progress
-                  value={((user?.totalScore || 0) % 1000)}
+                  value={(user?.totalScore || 0) % 1000}
                   max={1000}
                   variant="gold"
                   size="md"
@@ -399,22 +508,42 @@ export default function DashboardPage() {
                 </Link>
               </CardHeader>
               <CardContent>
-                <div className="grid grid-cols-3 gap-2">
-                  {["🏆", "⭐", "🔥", "💎", "🎯", "🌟"].map((emoji, i) => (
-                    <div
-                      key={i}
-                      className={cn(
-                        "aspect-square rounded-lg flex items-center justify-center text-2xl",
-                        i < 3 ? "bg-white/10" : "bg-white/5 grayscale opacity-50"
-                      )}
-                    >
-                      {emoji}
+                {achievementsLoading ? (
+                  <div className="space-y-4">
+                    <div className="grid grid-cols-3 gap-2">
+                      {[1, 2, 3, 4, 5, 6].map((i) => (
+                        <Skeleton key={i} className="aspect-square rounded-lg" />
+                      ))}
                     </div>
-                  ))}
-                </div>
-                <p className="text-sm text-muted-foreground text-center mt-4">
-                  3 of 20 unlocked
-                </p>
+                    <Skeleton className="h-4 w-28 mx-auto" />
+                  </div>
+                ) : unlockedCount > 0 ? (
+                  <>
+                    <div className="grid grid-cols-3 gap-2">
+                      {unlockedAchievements.slice(0, 6).map((achievement) => (
+                        <div
+                          key={achievement.id}
+                          className="aspect-square rounded-lg border border-white/10 bg-gradient-to-br from-amber-500/20 to-violet-500/20 flex items-center justify-center text-2xl"
+                          title={achievement.name}
+                        >
+                          {achievement.iconUrl || "🏆"}
+                        </div>
+                      ))}
+                    </div>
+                    <p className="text-sm text-muted-foreground text-center mt-4">
+                      {unlockedCount} of {totalCount} unlocked
+                    </p>
+                  </>
+                ) : (
+                  <div className="py-4">
+                    <p className="text-center text-muted-foreground">
+                      Complete puzzles to earn achievements
+                    </p>
+                    <p className="text-sm text-muted-foreground text-center mt-4">
+                      {unlockedCount} of {totalCount} unlocked
+                    </p>
+                  </div>
+                )}
               </CardContent>
             </Card>
           </motion.div>

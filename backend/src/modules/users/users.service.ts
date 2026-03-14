@@ -6,9 +6,19 @@ import {
 import { PrismaService } from '../../prisma';
 import { UpdateProfileInput, UserStats } from '@code-of-life/shared';
 
+const MILLISECONDS_IN_DAY = 24 * 60 * 60 * 1000;
+
 @Injectable()
 export class UsersService {
   constructor(private readonly prisma: PrismaService) {}
+
+  private getUtcDayStart(date: Date): number {
+    return Date.UTC(
+      date.getUTCFullYear(),
+      date.getUTCMonth(),
+      date.getUTCDate(),
+    );
+  }
 
   async getProfile(userId: string) {
     const user = await this.prisma.user.findUnique({
@@ -145,35 +155,23 @@ export class UsersService {
     }
 
     const now = new Date();
-    const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+    const today = this.getUtcDayStart(now);
+    const lastPlayedDate = user.lastPlayedAt
+      ? this.getUtcDayStart(new Date(user.lastPlayedAt))
+      : null;
 
-    let newStreakDays = user.streakDays;
+    let newStreakDays = 1;
 
-    if (user.lastPlayedAt) {
-      const lastPlayed = new Date(user.lastPlayedAt);
-      const lastPlayedDate = new Date(
-        lastPlayed.getFullYear(),
-        lastPlayed.getMonth(),
-        lastPlayed.getDate(),
-      );
-
+    if (lastPlayedDate !== null) {
       const diffDays = Math.floor(
-        (today.getTime() - lastPlayedDate.getTime()) / (1000 * 60 * 60 * 24),
+        (today - lastPlayedDate) / MILLISECONDS_IN_DAY,
       );
 
-      if (diffDays === 0) {
-        // Same day, keep streak
-        return user.streakDays;
+      if (diffDays <= 0) {
+        newStreakDays = user.streakDays;
       } else if (diffDays === 1) {
-        // Consecutive day, increment streak
         newStreakDays = user.streakDays + 1;
-      } else {
-        // Streak broken, reset to 1
-        newStreakDays = 1;
       }
-    } else {
-      // First time playing
-      newStreakDays = 1;
     }
 
     await this.prisma.user.update({
