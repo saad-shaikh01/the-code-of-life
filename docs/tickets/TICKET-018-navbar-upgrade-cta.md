@@ -5,80 +5,78 @@
 - **Priority:** P3
 - **Type:** feature-gap
 - **Area:** frontend
-- **Status:** open
+- **Status:** done
 - **Dependencies:** none
 
 ---
 
 ## Problem
-The header (`header.tsx`) already shows Profile, Achievements, and Settings in the authenticated user's dropdown. However, there is no visible "Upgrade" or pricing shortcut for free-tier users in the nav or header. Free users must navigate to `/pricing` manually by knowing the URL — there is no persistent nudge in the navigation.
-
-This is a UX refinement, not a missing feature. The navigation is functional; this ticket improves monetization discoverability.
+The authenticated header already exposed Profile, Achievements, and Settings through the user dropdown, but free-tier users had no visible pricing shortcut in the main navigation. The only way to reach `/pricing` was by knowing the URL or finding it elsewhere in the app.
 
 ---
 
 ## Why This Matters
-`issues.md` line 3: "navbar ma jo buttons ha I don't think so k unki need ha yaha kuch or b display karwa saqte hein hum". For free users, a visible upgrade prompt in the header is a standard monetization pattern that reduces friction to conversion.
+This is a small monetization UX refinement: free users should have a visible, low-friction path to upgrade without adding a banner or cluttering the dropdown.
 
 ---
 
 ## Evidence
-- `frontend/src/components/layout/header.tsx:120-127` — dropdown already has Profile, Achievements, Settings
-- `frontend/src/hooks/use-subscription.ts` — `useSubscriptionStatus()` returns `isFree`, `isPro`, `isPremium`
-- No "Upgrade" or pricing link exists anywhere in the main navigation
+- `frontend/src/components/layout/header.tsx` already handled authenticated navigation and the user dropdown
+- `frontend/src/hooks/use-subscription.ts` already exposed `isFree` and loading helpers through `useSubscriptionStatus()`
+- no visible upgrade/pricing link existed in the authenticated header before this change
 
 ---
 
 ## Scope
-In `header.tsx`, for authenticated free-tier users, add a small "Upgrade" badge/button in the header (desktop) and in the mobile menu:
-
-```tsx
-const { isFree, isLoading: subscriptionLoading } = useSubscriptionStatus();
-
-// In header nav (desktop), before the user avatar dropdown:
-{!subscriptionLoading && isFree && (
-  <Link href="/pricing">
-    <Button variant="primary" size="sm">
-      <Sparkles className="h-3.5 w-3.5 mr-1.5" />
-      Upgrade
-    </Button>
-  </Link>
-)}
-```
-
-For mobile: add an "Upgrade to PRO" item in the mobile nav menu, also conditional on `isFree`.
+1. Add a small visible upgrade CTA in the desktop header for authenticated free-tier users
+2. Add a matching upgrade entry in the mobile menu
+3. Hide both when the user is PRO/PREMIUM or unauthenticated
+4. Avoid any flash while subscription status is still loading
 
 ---
 
 ## Out of Scope
-- Redesigning the navigation structure
-- Adding more items to the dropdown (already has all needed links)
-- Subscription page changes
+- Navigation redesign
+- Adding more items to the user dropdown
+- Subscription page or checkout changes
 
 ---
 
 ## Implementation Notes
-- Use `isFree && !subscriptionLoading` to avoid a flash of the upgrade button for PRO users while subscription loads
-- Keep it subtle — a small button, not a banner
-- Use the existing `Sparkles` icon from lucide-react (already imported in other components)
-- The button should link to `/pricing`, not directly to checkout
+- Used `useSubscriptionStatus()` in `header.tsx` to determine `isFree` and `subscriptionLoading`.
+- Desktop behavior:
+  - shows a small `Upgrade` button with `Sparkles` icon
+  - visible only for authenticated free-tier users
+  - links to `/pricing`
+- Mobile behavior:
+  - adds an `Upgrade to Pro` item in the mobile menu
+  - also visible only for authenticated free-tier users
+  - closes the mobile menu on click
+- Guarded both with `!subscriptionLoading` so PRO users do not see a brief flash of the CTA while subscription state is loading.
+- No change was made for:
+  - PRO/PREMIUM users
+  - unauthenticated users
+  - the existing dropdown links
 
 ---
 
 ## Acceptance Criteria
-- [ ] Free-tier authenticated users see an "Upgrade" button in the desktop header
-- [ ] PRO and PREMIUM users do NOT see the upgrade button
-- [ ] Unauthenticated users do NOT see the upgrade button
-- [ ] Upgrade button links to `/pricing`
-- [ ] Mobile menu also shows upgrade option for free users
+- [x] Free-tier authenticated users see an `Upgrade` button in the desktop header
+- [x] PRO and PREMIUM users do not see the upgrade button
+- [x] Unauthenticated users do not see the upgrade button
+- [x] Upgrade button links to `/pricing`
+- [x] Mobile menu also shows an upgrade option for free users
 
 ---
 
 ## Testing Requirements
-- **Manual QA:**
-  1. Login as free user → verify "Upgrade" button visible in header
-  2. Login as PRO user → verify no upgrade button
-  3. Check mobile viewport — verify upgrade option in mobile menu
+- **Automated validation run:**
+  - targeted ESLint on `header.tsx`
+  - `frontend` production build
+- **Manual QA recommended:**
+  1. Login as free user and verify the desktop header shows `Upgrade`
+  2. Login as PRO user and verify no upgrade CTA appears
+  3. Check mobile viewport and verify `Upgrade to Pro` appears only for free users
 
 ---
 
@@ -88,9 +86,29 @@ For mobile: add an "Upgrade to PRO" item in the mobile nav menu, also conditiona
 ---
 
 ## Risks / Edge Cases
-- Brief flash during subscription status loading — prevent with `!subscriptionLoading` guard
+- Manual browser QA is still needed to verify subscription-loading timing in a real session.
+- The existing Next.js warning about `middleware.ts` being deprecated in favor of `proxy` remains unrelated to this ticket.
 
 ---
 
 ## Open Questions
 None.
+
+---
+
+## Files Changed
+- `frontend/src/components/layout/header.tsx`
+- `docs/tickets/TICKET-018-navbar-upgrade-cta.md`
+- `docs/tickets/README.md`
+
+---
+
+## Validation Performed
+- `frontend`: `npx eslint -- "src/components/layout/header.tsx"`
+- `frontend`: `npm run build`
+
+---
+
+## Follow-up Notes
+- Completed: 2026-03-15.
+- Manual browser QA was not run in this terminal session.

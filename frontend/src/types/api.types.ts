@@ -54,11 +54,14 @@ export interface AuthTokens {
 export interface User {
   id: string;
   email: string;
+  emailVerified: boolean;
   username: string;
   avatarUrl: string | null;
   currentLevel: number;
   totalScore: number;
   streakDays: number;
+  growthPoints: number;
+  growthStage: number;
   lastPlayedAt: string | null;
   createdAt: string;
 }
@@ -95,6 +98,14 @@ export interface ForgotPasswordResponse {
 export interface ResetPasswordInput {
   token: string;
   newPassword: string;
+}
+
+export interface VerifyEmailInput {
+  token: string;
+}
+
+export interface MessageResponse {
+  message: string;
 }
 
 // ============================================
@@ -214,6 +225,8 @@ export interface UserStats {
   totalScore: number;
   currentLevel: number;
   streakDays: number;
+  growthPoints: number;
+  growthStage: number;
   averageTimePerPuzzle: number;
   hintsUsed: number;
   achievementsUnlocked: number;

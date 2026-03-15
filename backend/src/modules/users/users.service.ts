@@ -7,6 +7,8 @@ import { PrismaService } from '../../prisma';
 import { UpdateProfileInput, UserStats } from '@code-of-life/shared';
 
 const MILLISECONDS_IN_DAY = 24 * 60 * 60 * 1000;
+export const GROWTH_THRESHOLDS = [0, 50, 100, 250, 500, 1000] as const;
+const MAX_GROWTH_POINTS = GROWTH_THRESHOLDS[GROWTH_THRESHOLDS.length - 1];
 
 @Injectable()
 export class UsersService {
@@ -31,6 +33,8 @@ export class UsersService {
         currentLevel: true,
         totalScore: true,
         streakDays: true,
+        growthPoints: true,
+        growthStage: true,
         lastPlayedAt: true,
         createdAt: true,
       },
@@ -69,6 +73,8 @@ export class UsersService {
         currentLevel: true,
         totalScore: true,
         streakDays: true,
+        growthPoints: true,
+        growthStage: true,
         lastPlayedAt: true,
         createdAt: true,
       },
@@ -91,16 +97,26 @@ export class UsersService {
     }
 
     const completedPuzzles = user.progress.filter((p) => p.completed);
-    const totalTimeSpent = completedPuzzles.reduce((sum, p) => sum + p.timeSpent, 0);
-    const totalHintsUsed = completedPuzzles.reduce((sum, p) => sum + p.hintsUsed, 0);
+    const totalTimeSpent = completedPuzzles.reduce(
+      (sum, p) => sum + p.timeSpent,
+      0,
+    );
+    const totalHintsUsed = completedPuzzles.reduce(
+      (sum, p) => sum + p.hintsUsed,
+      0,
+    );
     const averageTime =
-      completedPuzzles.length > 0 ? totalTimeSpent / completedPuzzles.length : 0;
+      completedPuzzles.length > 0
+        ? totalTimeSpent / completedPuzzles.length
+        : 0;
 
     return {
       totalPuzzlesCompleted: completedPuzzles.length,
       totalScore: user.totalScore,
       currentLevel: user.currentLevel,
       streakDays: user.streakDays,
+      growthPoints: user.growthPoints,
+      growthStage: user.growthStage,
       averageTimePerPuzzle: Math.round(averageTime),
       hintsUsed: totalHintsUsed,
       achievementsUnlocked: user.achievements.length,
@@ -183,6 +199,52 @@ export class UsersService {
     });
 
     return newStreakDays;
+  }
+
+  async updateGrowth(
+    userId: string,
+    pointsToAdd: number,
+  ): Promise<{ growthPoints: number; growthStage: number }> {
+    const user = await this.prisma.user.findUnique({
+      where: { id: userId },
+      select: { growthPoints: true },
+    });
+
+    if (!user) {
+      throw new NotFoundException('User not found');
+    }
+
+    const growthPoints = Math.min(
+      MAX_GROWTH_POINTS,
+      user.growthPoints + Math.max(0, pointsToAdd),
+    );
+    const growthStage = this.getGrowthStage(growthPoints);
+
+    const updatedUser = await this.prisma.user.update({
+      where: { id: userId },
+      data: {
+        growthPoints,
+        growthStage,
+      },
+      select: {
+        growthPoints: true,
+        growthStage: true,
+      },
+    });
+
+    return updatedUser;
+  }
+
+  private getGrowthStage(totalPoints: number): number {
+    let stage = 1;
+
+    for (let index = 1; index < GROWTH_THRESHOLDS.length - 1; index++) {
+      if (totalPoints >= GROWTH_THRESHOLDS[index]) {
+        stage = index + 1;
+      }
+    }
+
+    return stage;
   }
 
   async deleteAccount(userId: string): Promise<void> {

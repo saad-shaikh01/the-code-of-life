@@ -1,13 +1,16 @@
-import { z } from 'zod';
+import { z } from "zod";
 
 export const updateProfileSchema = z.object({
   username: z
     .string()
-    .min(3, 'Username must be at least 3 characters')
-    .max(30, 'Username must be less than 30 characters')
-    .regex(/^[a-zA-Z0-9_]+$/, 'Username can only contain letters, numbers, and underscores')
+    .min(3, "Username must be at least 3 characters")
+    .max(30, "Username must be less than 30 characters")
+    .regex(
+      /^[a-zA-Z0-9_]+$/,
+      "Username can only contain letters, numbers, and underscores",
+    )
     .optional(),
-  avatarUrl: z.string().url('Invalid avatar URL').nullable().optional(),
+  avatarUrl: z.string().url("Invalid avatar URL").nullable().optional(),
 });
 
 export const userStatsSchema = z.object({
@@ -15,6 +18,8 @@ export const userStatsSchema = z.object({
   totalScore: z.number().int().min(0),
   currentLevel: z.number().int().min(1),
   streakDays: z.number().int().min(0),
+  growthPoints: z.number().int().min(0),
+  growthStage: z.number().int().min(1).max(5),
   averageTimePerPuzzle: z.number().min(0),
   hintsUsed: z.number().int().min(0),
   achievementsUnlocked: z.number().int().min(0),
@@ -23,11 +28,14 @@ export const userStatsSchema = z.object({
 export const userProfileSchema = z.object({
   id: z.string(),
   email: z.string().email(),
+  emailVerified: z.boolean(),
   username: z.string(),
   avatarUrl: z.string().nullable(),
   currentLevel: z.number().int(),
   totalScore: z.number().int(),
   streakDays: z.number().int(),
+  growthPoints: z.number().int().min(0),
+  growthStage: z.number().int().min(1).max(5),
   lastPlayedAt: z.date().nullable(),
   createdAt: z.date(),
 });

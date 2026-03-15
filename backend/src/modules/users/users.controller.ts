@@ -1,22 +1,29 @@
 import {
   Controller,
   Get,
+  Post,
   Patch,
   Delete,
   Body,
   Param,
   UseGuards,
+  UseInterceptors,
   HttpCode,
   HttpStatus,
+  UploadedFile,
 } from '@nestjs/common';
+import { FileInterceptor } from '@nestjs/platform-express';
+import { memoryStorage } from 'multer';
 import {
   ApiTags,
   ApiOperation,
   ApiResponse,
   ApiBearerAuth,
   ApiParam,
+  ApiConsumes,
 } from '@nestjs/swagger';
 import { createZodDto } from 'nestjs-zod';
+import { AvatarService } from './avatar.service';
 import { UsersService } from './users.service';
 import { updateProfileSchema, UserStats } from '@code-of-life/shared';
 import { ApiResponseDto } from '../../common/dto';
@@ -31,7 +38,10 @@ class UpdateProfileDto extends createZodDto(updateProfileSchema) {}
 @Controller('users')
 @UseGuards(JwtAuthGuard)
 export class UsersController {
-  constructor(private readonly usersService: UsersService) {}
+  constructor(
+    private readonly usersService: UsersService,
+    private readonly avatarService: AvatarService,
+  ) {}
 
   @Get('profile')
   @ApiBearerAuth()
@@ -53,7 +63,10 @@ export class UsersController {
     @CurrentUser('id') userId: string,
     @Body() updateProfileDto: UpdateProfileDto,
   ) {
-    const profile = await this.usersService.updateProfile(userId, updateProfileDto);
+    const profile = await this.usersService.updateProfile(
+      userId,
+      updateProfileDto,
+    );
     return ApiResponseDto.success(profile, 'Profile updated successfully');
   }
 
@@ -67,6 +80,30 @@ export class UsersController {
   ): Promise<ApiResponseDto<UserStats>> {
     const stats = await this.usersService.getStats(userId);
     return ApiResponseDto.success(stats);
+  }
+
+  @Post('avatar')
+  @UseInterceptors(
+    FileInterceptor('avatar', {
+      storage: memoryStorage(),
+    }),
+  )
+  @ApiBearerAuth()
+  @ApiConsumes('multipart/form-data')
+  @ApiOperation({ summary: 'Upload a user avatar image' })
+  @ApiResponse({ status: 200, description: 'Avatar uploaded successfully' })
+  @ApiResponse({ status: 400, description: 'Invalid avatar file' })
+  @ApiResponse({ status: 401, description: 'Unauthorized' })
+  async uploadAvatar(
+    @CurrentUser('id') userId: string,
+    @UploadedFile() file: Express.Multer.File,
+  ) {
+    const avatarUrl = await this.avatarService.saveAvatar(file, userId);
+    await this.usersService.updateProfile(userId, { avatarUrl });
+    return ApiResponseDto.success(
+      { avatarUrl },
+      'Avatar uploaded successfully',
+    );
   }
 
   @Get(':username')

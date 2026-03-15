@@ -3,7 +3,19 @@
 import * as React from "react";
 import { useRouter } from "next/navigation";
 import { motion } from "framer-motion";
-import { Settings, User, Lock, Palette, Bell, Trash2, Moon, Sun, Monitor } from "lucide-react";
+import { useQueryClient } from "@tanstack/react-query";
+import {
+  Settings,
+  User,
+  Lock,
+  Palette,
+  Trash2,
+  Moon,
+  Sun,
+  Monitor,
+  Upload,
+  Image as ImageIcon,
+} from "lucide-react";
 import { useAuthStore } from "@/stores";
 import { useTheme } from "@/modules/theme/contexts/theme-provider";
 import { usersService, authService } from "@/api";
@@ -17,6 +29,7 @@ import {
   CardContent,
   Button,
   Input,
+  Avatar,
   Dialog,
   DialogContent,
   DialogHeader,
@@ -28,6 +41,7 @@ import { cn } from "@/lib/utils";
 
 export default function SettingsPage() {
   const router = useRouter();
+  const queryClient = useQueryClient();
   const { user, setUser, logout } = useAuthStore();
   const { theme, setTheme } = useTheme();
   const { addToast } = useToast();
@@ -36,6 +50,17 @@ export default function SettingsPage() {
   const [username, setUsername] = React.useState(user?.username || "");
   const [avatarUrl, setAvatarUrl] = React.useState(user?.avatarUrl || "");
   const [isUpdatingProfile, setIsUpdatingProfile] = React.useState(false);
+  const [selectedAvatarFile, setSelectedAvatarFile] = React.useState<File | null>(
+    null,
+  );
+  const [avatarPreviewUrl, setAvatarPreviewUrl] = React.useState<string | null>(
+    null,
+  );
+  const [avatarUploadError, setAvatarUploadError] = React.useState<string | null>(
+    null,
+  );
+  const [isUploadingAvatar, setIsUploadingAvatar] = React.useState(false);
+  const avatarInputRef = React.useRef<HTMLInputElement | null>(null);
 
   // Password form
   const [currentPassword, setCurrentPassword] = React.useState("");
@@ -48,6 +73,46 @@ export default function SettingsPage() {
   const [deleteConfirm, setDeleteConfirm] = React.useState("");
   const [isDeleting, setIsDeleting] = React.useState(false);
 
+  React.useEffect(() => {
+    if (selectedAvatarFile) {
+      const objectUrl = URL.createObjectURL(selectedAvatarFile);
+      setAvatarPreviewUrl(objectUrl);
+
+      return () => {
+        URL.revokeObjectURL(objectUrl);
+      };
+    }
+
+    setAvatarPreviewUrl(null);
+    return undefined;
+  }, [selectedAvatarFile]);
+
+  const applyUserUpdate = React.useCallback(
+    (nextUser: typeof user) => {
+      if (!nextUser) {
+        return;
+      }
+
+      setUser(nextUser);
+      queryClient.setQueryData(["user-profile"], (existing: unknown) => {
+        if (
+          existing &&
+          typeof existing === "object" &&
+          "data" in existing &&
+          existing.data
+        ) {
+          return {
+            ...(existing as Record<string, unknown>),
+            data: nextUser,
+          };
+        }
+
+        return existing;
+      });
+    },
+    [queryClient, setUser],
+  );
+
   const handleUpdateProfile = async () => {
     setIsUpdatingProfile(true);
     try {
@@ -55,7 +120,7 @@ export default function SettingsPage() {
         username: username !== user?.username ? username : undefined,
         avatarUrl: avatarUrl !== user?.avatarUrl ? avatarUrl : undefined,
       });
-      setUser(response.data);
+      applyUserUpdate(response.data);
       addToast({
         type: "success",
         title: "Profile Updated",
@@ -69,6 +134,85 @@ export default function SettingsPage() {
       });
     } finally {
       setIsUpdatingProfile(false);
+    }
+  };
+
+  const handleAvatarSelection = (
+    event: React.ChangeEvent<HTMLInputElement>,
+  ) => {
+    const file = event.target.files?.[0] ?? null;
+    setAvatarUploadError(null);
+
+    if (!file) {
+      setSelectedAvatarFile(null);
+      return;
+    }
+
+    const validMimeTypes = [
+      "image/jpeg",
+      "image/png",
+      "image/webp",
+      "image/gif",
+    ];
+    const maxFileSizeBytes = 2 * 1024 * 1024;
+
+    if (!validMimeTypes.includes(file.type)) {
+      setSelectedAvatarFile(null);
+      setAvatarUploadError("Only JPG, PNG, WEBP, and GIF images are allowed.");
+      if (avatarInputRef.current) {
+        avatarInputRef.current.value = "";
+      }
+      return;
+    }
+
+    if (file.size > maxFileSizeBytes) {
+      setSelectedAvatarFile(null);
+      setAvatarUploadError("Avatar file size cannot exceed 2MB.");
+      if (avatarInputRef.current) {
+        avatarInputRef.current.value = "";
+      }
+      return;
+    }
+
+    setSelectedAvatarFile(file);
+  };
+
+  const handleUploadAvatar = async () => {
+    if (!selectedAvatarFile || !user) {
+      return;
+    }
+
+    setIsUploadingAvatar(true);
+    setAvatarUploadError(null);
+
+    try {
+      const response = await usersService.uploadAvatar(selectedAvatarFile);
+      const nextAvatarUrl = response.data.avatarUrl;
+      setAvatarUrl(nextAvatarUrl);
+      applyUserUpdate({
+        ...user,
+        avatarUrl: nextAvatarUrl,
+      });
+      setSelectedAvatarFile(null);
+      if (avatarInputRef.current) {
+        avatarInputRef.current.value = "";
+      }
+      addToast({
+        type: "success",
+        title: "Avatar Uploaded",
+        description: "Your profile picture has been updated.",
+      });
+    } catch (error) {
+      const message =
+        error instanceof Error ? error.message : "Failed to upload avatar.";
+      setAvatarUploadError(message);
+      addToast({
+        type: "error",
+        title: "Avatar Upload Failed",
+        description: message,
+      });
+    } finally {
+      setIsUploadingAvatar(false);
     }
   };
 
@@ -175,6 +319,53 @@ export default function SettingsPage() {
             <CardDescription>Update your display name and avatar</CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
+            <div className="flex flex-col gap-4 rounded-2xl border border-white/10 bg-white/5 p-4 sm:flex-row sm:items-center">
+              <Avatar
+                src={avatarPreviewUrl || avatarUrl || user.avatarUrl}
+                alt={username || user.username}
+                fallback={username || user.username}
+                size="xl"
+              />
+              <div className="flex-1 space-y-3">
+                <div className="space-y-1">
+                  <p className="text-sm font-medium text-foreground">
+                    Upload Profile Picture
+                  </p>
+                  <p className="text-xs text-muted-foreground">
+                    JPG, PNG, WEBP, or GIF. Maximum file size: 2MB.
+                  </p>
+                </div>
+                <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
+                  <label className="inline-flex cursor-pointer items-center gap-2 rounded-lg border border-white/10 bg-white/5 px-4 py-2 text-sm font-medium text-foreground transition-colors hover:border-white/20 hover:bg-white/10">
+                    <ImageIcon className="h-4 w-4" />
+                    Choose Image
+                    <input
+                      ref={avatarInputRef}
+                      type="file"
+                      accept="image/jpeg,image/png,image/webp,image/gif"
+                      className="hidden"
+                      onChange={handleAvatarSelection}
+                    />
+                  </label>
+                  <Button
+                    onClick={handleUploadAvatar}
+                    isLoading={isUploadingAvatar}
+                    disabled={!selectedAvatarFile}
+                  >
+                    <Upload className="mr-2 h-4 w-4" />
+                    Upload
+                  </Button>
+                </div>
+                {selectedAvatarFile ? (
+                  <p className="text-xs text-muted-foreground">
+                    Selected: {selectedAvatarFile.name}
+                  </p>
+                ) : null}
+                {avatarUploadError ? (
+                  <p className="text-sm text-red-400">{avatarUploadError}</p>
+                ) : null}
+              </div>
+            </div>
             <Input
               label="Username"
               value={username}

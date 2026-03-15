@@ -84,4 +84,63 @@ describe('PuzzlesService', () => {
       await expect(service.findDailyPuzzle()).resolves.toBeNull();
     });
   });
+
+  describe('update', () => {
+    it('passes nullable fields through to Prisma, including scheduledDate=null', async () => {
+      const existingPuzzle = {
+        id: 'puzzle-1',
+        title: 'Existing puzzle',
+      };
+      const updatedPuzzle = {
+        ...existingPuzzle,
+        bookChapter: null,
+        bookSection: null,
+        bookPageRef: null,
+        scheduledDate: null,
+      };
+
+      mockPrismaService.puzzle.findUnique.mockResolvedValue(existingPuzzle);
+      mockPrismaService.puzzle.update.mockResolvedValue(updatedPuzzle);
+
+      const result = await service.update('puzzle-1', {
+        bookChapter: null,
+        bookSection: null,
+        bookPageRef: null,
+        scheduledDate: null,
+      });
+
+      expect(mockPrismaService.puzzle.update).toHaveBeenCalledWith({
+        where: { id: 'puzzle-1' },
+        data: {
+          bookChapter: null,
+          bookSection: null,
+          bookPageRef: null,
+          scheduledDate: null,
+        },
+      });
+      expect(result).toEqual(updatedPuzzle);
+    });
+
+    it('converts scheduledDate strings to Date during update', async () => {
+      const existingPuzzle = {
+        id: 'puzzle-2',
+        title: 'Existing puzzle',
+      };
+      const scheduledDate = '2026-03-20T00:00:00.000Z';
+
+      mockPrismaService.puzzle.findUnique.mockResolvedValue(existingPuzzle);
+      mockPrismaService.puzzle.update.mockResolvedValue(existingPuzzle);
+
+      await service.update('puzzle-2', {
+        scheduledDate,
+      });
+
+      expect(mockPrismaService.puzzle.update).toHaveBeenCalledWith({
+        where: { id: 'puzzle-2' },
+        data: {
+          scheduledDate: new Date(scheduledDate),
+        },
+      });
+    });
+  });
 });

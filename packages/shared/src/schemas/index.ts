@@ -1,26 +1,29 @@
 // Common schemas
-export * from './common.schema';
+export * from "./common.schema";
 
 // Auth schemas
-export * from './auth.schema';
+export * from "./auth.schema";
 
 // User schemas
-export * from './user.schema';
+export * from "./user.schema";
 
 // Progress schemas
-export * from './progress.schema';
+export * from "./progress.schema";
 
 // Achievement schemas
-export * from './achievement.schema';
+export * from "./achievement.schema";
 
 // Leaderboard schemas
-export * from './leaderboard.schema';
+export * from "./leaderboard.schema";
 
 // Puzzle schemas
-export * from './puzzle.schema';
+export * from "./puzzle.schema";
 
 // Decoder schemas
-export * from './decoder.schema';
+export * from "./decoder.schema";
+
+// Battle schemas
+export * from "./battle.schema";
 
 // Multiplayer schemas
-export * from './multiplayer.schema';
+export * from "./multiplayer.schema";

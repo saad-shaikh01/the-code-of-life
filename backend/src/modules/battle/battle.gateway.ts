@@ -9,6 +9,21 @@ import {
 } from '@nestjs/websockets';
 import { Logger, UseGuards } from '@nestjs/common';
 import { Server, Socket } from 'socket.io';
+import {
+  joinLobbyMessageSchema,
+  leaveLobbyMessageSchema,
+  pingMessageSchema,
+  playerReadyMessageSchema,
+  progressUpdateMessageSchema,
+  submitSolutionMessageSchema,
+  type JoinLobbyMessage,
+  type LeaveLobbyMessage,
+  type PingMessage,
+  type PlayerReadyMessage,
+  type ProgressUpdateMessage,
+  type SubmitSolutionMessage,
+} from '@code-of-life/shared';
+import { type ZodIssue, type ZodType } from 'zod';
 import { BattleService } from './battle.service';
 import { WsJwtGuard } from './ws-jwt.guard';
 
@@ -31,6 +46,35 @@ export class BattleGateway implements OnGatewayConnection, OnGatewayDisconnect {
 
   constructor(private readonly battleService: BattleService) {}
 
+  private validatePayload<T>(
+    client: AuthenticatedSocket,
+    schema: ZodType<T>,
+    payload: unknown,
+  ): T | null {
+    const parsed = schema.safeParse(payload);
+
+    if (!parsed.success) {
+      this.emitInvalidPayload(client, parsed.error.issues);
+      return null;
+    }
+
+    return parsed.data;
+  }
+
+  private emitInvalidPayload(
+    client: AuthenticatedSocket,
+    issues: ZodIssue[],
+  ): void {
+    client.emit('error', {
+      message: 'Invalid payload',
+      errors: issues,
+    });
+    client.emit('battle_error', {
+      code: 'INVALID_PAYLOAD',
+      message: 'Invalid payload',
+    });
+  }
+
   handleConnection(client: AuthenticatedSocket) {
     this.logger.log(`Client connected: ${client.id}`);
     // Authentication will be handled when they try to join a lobby
@@ -43,7 +87,19 @@ export class BattleGateway implements OnGatewayConnection, OnGatewayDisconnect {
   }
 
   @SubscribeMessage('ping')
-  handlePing(@ConnectedSocket() client: AuthenticatedSocket) {
+  handlePing(
+    @ConnectedSocket() client: AuthenticatedSocket,
+    @MessageBody() payload?: unknown,
+  ) {
+    const data = this.validatePayload<PingMessage>(
+      client,
+      pingMessageSchema,
+      payload ?? {},
+    );
+    if (!data) {
+      return;
+    }
+
     client.emit('pong', { timestamp: Date.now() });
   }
 
@@ -51,8 +107,17 @@ export class BattleGateway implements OnGatewayConnection, OnGatewayDisconnect {
   @UseGuards(WsJwtGuard)
   async handleJoinLobby(
     @ConnectedSocket() client: AuthenticatedSocket,
-    @MessageBody() data: { lobbyId?: string; puzzleDifficulty?: string },
+    @MessageBody() payload: unknown,
   ) {
+    const data = this.validatePayload<JoinLobbyMessage>(
+      client,
+      joinLobbyMessageSchema,
+      payload,
+    );
+    if (!data) {
+      return;
+    }
+
     try {
       const user = client.user;
       if (!user) {
@@ -99,8 +164,17 @@ export class BattleGateway implements OnGatewayConnection, OnGatewayDisconnect {
   @UseGuards(WsJwtGuard)
   async handleLeaveLobby(
     @ConnectedSocket() client: AuthenticatedSocket,
-    @MessageBody() data: { lobbyId: string },
+    @MessageBody() payload: unknown,
   ) {
+    const data = this.validatePayload<LeaveLobbyMessage>(
+      client,
+      leaveLobbyMessageSchema,
+      payload,
+    );
+    if (!data) {
+      return;
+    }
+
     try {
       const user = client.user;
       if (!user) return;
@@ -130,8 +204,17 @@ export class BattleGateway implements OnGatewayConnection, OnGatewayDisconnect {
   @UseGuards(WsJwtGuard)
   async handlePlayerReady(
     @ConnectedSocket() client: AuthenticatedSocket,
-    @MessageBody() data: { lobbyId: string; isReady: boolean },
+    @MessageBody() payload: unknown,
   ) {
+    const data = this.validatePayload<PlayerReadyMessage>(
+      client,
+      playerReadyMessageSchema,
+      payload,
+    );
+    if (!data) {
+      return;
+    }
+
     try {
       const user = client.user;
       if (!user) return;
@@ -170,15 +253,17 @@ export class BattleGateway implements OnGatewayConnection, OnGatewayDisconnect {
   @UseGuards(WsJwtGuard)
   async handleProgressUpdate(
     @ConnectedSocket() client: AuthenticatedSocket,
-    @MessageBody()
-    data: {
-      lobbyId: string;
-      progress: number;
-      correctCharacters: number;
-      totalCharacters: number;
-      hintsUsed: number;
-    },
+    @MessageBody() payload: unknown,
   ) {
+    const data = this.validatePayload<ProgressUpdateMessage>(
+      client,
+      progressUpdateMessageSchema,
+      payload,
+    );
+    if (!data) {
+      return;
+    }
+
     try {
       const user = client.user;
       if (!user) return;
@@ -204,9 +289,17 @@ export class BattleGateway implements OnGatewayConnection, OnGatewayDisconnect {
   @UseGuards(WsJwtGuard)
   async handleSubmitSolution(
     @ConnectedSocket() client: AuthenticatedSocket,
-    @MessageBody()
-    data: { lobbyId: string; solution: string; timeElapsed: number },
+    @MessageBody() payload: unknown,
   ) {
+    const data = this.validatePayload<SubmitSolutionMessage>(
+      client,
+      submitSolutionMessageSchema,
+      payload,
+    );
+    if (!data) {
+      return;
+    }
+
     try {
       const user = client.user;
       if (!user) return;

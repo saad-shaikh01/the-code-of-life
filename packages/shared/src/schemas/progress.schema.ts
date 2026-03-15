@@ -1,17 +1,18 @@
-import { z } from 'zod';
+import { z } from "zod";
+import { HINTS_PER_PUZZLE } from "../constants";
 
 export const submitProgressSchema = z.object({
-  puzzleId: z.string().min(1, 'Puzzle ID is required'),
+  puzzleId: z.string().min(1, "Puzzle ID is required"),
   completed: z.boolean().default(false),
   score: z.number().int().min(0).default(0),
-  timeSpent: z.number().int().min(0).describe('Time spent in seconds'),
-  hintsUsed: z.number().int().min(0).default(0),
+  timeSpent: z.number().int().min(0).describe("Time spent in seconds"),
+  hintsUsed: z.number().int().min(0).max(HINTS_PER_PUZZLE).default(0),
 });
 
 export const progressQuerySchema = z.object({
   puzzleId: z.string().optional(),
   completed: z.coerce.boolean().optional(),
-  gameMode: z.enum(['STORY', 'CHALLENGE', 'DAILY']).optional(),
+  gameMode: z.enum(["STORY", "CHALLENGE", "DAILY"]).optional(),
 });
 
 export const progressResponseSchema = z.object({

@@ -17,7 +17,7 @@ import { BattleModule } from './modules/battle';
     // Configuration
     ConfigModule.forRoot({
       isGlobal: true,
-      envFilePath: '../.env',
+      envFilePath: ['.env', '../.env'],
     }),
 
     // Database

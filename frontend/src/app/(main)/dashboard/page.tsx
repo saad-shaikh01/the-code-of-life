@@ -3,6 +3,7 @@
 import * as React from "react";
 import Link from "next/link";
 import { motion } from "framer-motion";
+import { useQuery } from "@tanstack/react-query";
 import {
   AlertCircle,
   Calendar,
@@ -19,9 +20,11 @@ import {
   Lock,
   CheckCircle2,
   Sparkles,
+  Leaf,
 } from "lucide-react";
 import { useAuthStore } from "@/stores";
 import { useDailyPuzzle, useUserAchievements, useUserProgress } from "@/hooks";
+import { usersService } from "@/api";
 import { PageHeader } from "@/components/layout";
 import {
   Button,
@@ -34,6 +37,12 @@ import {
   Skeleton,
 } from "@/components/ui";
 import { getCipherPreviewTokens } from "@/lib/cipher";
+import {
+  getGrowthStageLabel,
+  getGrowthThresholdRange,
+  MAX_GROWTH_POINTS,
+  MAX_GROWTH_STAGE,
+} from "@/lib/growth";
 import { cn } from "@/lib/utils";
 import { CipherTokenCell } from "@/modules/puzzles/components/CipherTokenCell";
 
@@ -52,6 +61,11 @@ const itemVariants = {
 
 export default function DashboardPage() {
   const { user } = useAuthStore();
+  const { data: profileData, isLoading: profileLoading } = useQuery({
+    queryKey: ["user-profile"],
+    queryFn: () => usersService.getProfile(),
+    enabled: !!user,
+  });
   const {
     data: dailyPuzzle,
     isLoading: dailyLoading,
@@ -70,6 +84,15 @@ export default function DashboardPage() {
   );
   const unlockedCount = unlockedAchievements.length;
   const totalCount = achievements.length;
+  const profile = profileData?.data ?? user;
+  const growthStage = profile?.growthStage ?? 1;
+  const growthPoints = profile?.growthPoints ?? 0;
+  const growthLabel = getGrowthStageLabel(growthStage);
+  const { nextThreshold } = getGrowthThresholdRange(growthStage);
+  const growthSummary =
+    growthStage >= MAX_GROWTH_STAGE
+      ? `${growthPoints.toLocaleString()} / ${MAX_GROWTH_POINTS.toLocaleString()} pts`
+      : `${growthPoints.toLocaleString()} / ${nextThreshold.toLocaleString()} pts`;
 
   // Calculate stats from progress data
   const stats = React.useMemo(() => {
@@ -146,11 +169,11 @@ export default function DashboardPage() {
                       </p>
                     </div>
                   </div>
-                  {user?.streakDays && user.streakDays > 0 && (
+                  {profile?.streakDays && profile.streakDays > 0 && (
                     <div className="flex items-center gap-2 px-3 py-1.5 rounded-full bg-orange-500/10 border border-orange-500/20">
                       <Flame className="h-4 w-4 text-orange-400" />
                       <span className="text-sm font-medium text-orange-400">
-                        {user.streakDays} day streak!
+                        {profile.streakDays} day streak!
                       </span>
                     </div>
                   )}
@@ -435,7 +458,7 @@ export default function DashboardPage() {
                         </span>
                       </div>
                       <span className="font-bold text-amber-400">
-                        {user?.totalScore?.toLocaleString() || 0}
+                        {profile?.totalScore?.toLocaleString() || 0}
                       </span>
                     </div>
                     <div className="flex items-center justify-between p-3 rounded-lg bg-violet-500/10 border border-violet-500/20">
@@ -444,7 +467,7 @@ export default function DashboardPage() {
                         <span className="text-muted-foreground">Level</span>
                       </div>
                       <span className="font-bold text-violet-400">
-                        {user?.currentLevel || 1}
+                        {profile?.currentLevel || 1}
                       </span>
                     </div>
                     <div className="flex items-center justify-between p-3 rounded-lg bg-emerald-500/10 border border-emerald-500/20">
@@ -457,6 +480,28 @@ export default function DashboardPage() {
                       <span className="font-bold text-emerald-400">
                         {stats?.totalCompleted || 0}
                       </span>
+                    </div>
+                    <div className="flex items-center justify-between rounded-lg border border-cyan-500/20 bg-cyan-500/10 px-3 py-3">
+                      <div className="flex items-center gap-3">
+                        <Leaf className="h-5 w-5 text-cyan-300" />
+                        <div>
+                          <p className="text-sm font-medium text-foreground">
+                            Stage {growthStage} - {growthLabel}
+                          </p>
+                          <p className="text-xs text-muted-foreground">
+                            Growth Journey
+                          </p>
+                        </div>
+                      </div>
+                      <div className="text-right">
+                        {profileLoading ? (
+                          <Skeleton className="h-4 w-24" />
+                        ) : (
+                          <p className="text-sm font-semibold text-cyan-300">
+                            {growthSummary}
+                          </p>
+                        )}
+                      </div>
                     </div>
                   </>
                 )}
@@ -476,17 +521,17 @@ export default function DashboardPage() {
               <CardContent>
                 <div className="text-center mb-4">
                   <span className="text-4xl font-bold text-gradient-gold">
-                    Level {user?.currentLevel || 1}
+                    Level {profile?.currentLevel || 1}
                   </span>
                 </div>
                 <Progress
-                  value={(user?.totalScore || 0) % 1000}
+                  value={(profile?.totalScore || 0) % 1000}
                   max={1000}
                   variant="gold"
                   size="md"
                 />
                 <p className="text-sm text-muted-foreground text-center mt-2">
-                  {1000 - ((user?.totalScore || 0) % 1000)} XP to next level
+                  {1000 - ((profile?.totalScore || 0) % 1000)} XP to next level
                 </p>
               </CardContent>
             </Card>
@@ -512,7 +557,10 @@ export default function DashboardPage() {
                   <div className="space-y-4">
                     <div className="grid grid-cols-3 gap-2">
                       {[1, 2, 3, 4, 5, 6].map((i) => (
-                        <Skeleton key={i} className="aspect-square rounded-lg" />
+                        <Skeleton
+                          key={i}
+                          className="aspect-square rounded-lg"
+                        />
                       ))}
                     </div>
                     <Skeleton className="h-4 w-28 mx-auto" />

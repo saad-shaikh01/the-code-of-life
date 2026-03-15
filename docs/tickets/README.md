@@ -18,6 +18,23 @@
 - `TICKET-008`: completed on 2026-03-13. Minimal forgot/reset password flow is now live with dev-mode reset tokens returned in the API response and two new auth pages.
 - `TICKET-009`: completed on 2026-03-15. Dashboard achievements now use `useUserAchievements()` data, including real unlocked counts, loading skeletons, and an empty state.
 - `TICKET-010`: completed on 2026-03-15. Battle sockets now use app-level heartbeat, bounded reconnect + room rejoin logic, stronger waiting/error UX, and a forfeit confirmation dialog.
+- `TICKET-011`: completed on 2026-03-15. Public `/about`, `/privacy`, and `/terms` pages now exist, and the challenge-mode audit confirmed a separate entitlement mismatch tracked in `TICKET-028`.
+- `TICKET-012`: completed on 2026-03-15. Puzzle solving now includes a collapsible decoder reference panel backed by `GET /api/decoder/symbol-map`, with mobile-collapsed and desktop-expanded defaults.
+- `TICKET-013`: completed on 2026-03-15. Admin RBAC now protects puzzle and achievement mutation endpoints, JWT auth carries `role`, and the seed script upserts a development admin account.
+- `TICKET-014`: completed on 2026-03-15. Growth points and stages now progress from puzzle completions, auth/profile responses expose the persisted growth fields, and the profile/dashboard use the real growth data.
+- `TICKET-015`: completed on 2026-03-15. `updatePuzzleSchema` now allows explicit `null` only for truly nullable puzzle fields, and `scheduledDate: null` now survives the service layer to clear the persisted value.
+- `TICKET-016`: completed on 2026-03-15. Login now routes auth into `sessionStorage` or `localStorage` based on "Remember me", hydration reads both storage modes, and the auth routing cookie now matches session vs persistent logins.
+- `TICKET-017`: completed on 2026-03-15. The landing page now routes all major CTAs through the hydrated auth-aware CTA component, and logged-in users see a single `Go to Dashboard` action instead of sign-in/register prompts.
+- `TICKET-018`: completed on 2026-03-15. Free-tier authenticated users now see a subtle `/pricing` upgrade CTA in the desktop header and mobile menu, while paid and unauthenticated users see no extra prompt.
+- `TICKET-019`: completed on 2026-03-15. Protected pages now sit behind a shared `ErrorBoundary`, and `story`, `challenge`, and `leaderboards` use consistent skeleton, inline error, and empty-state UI.
+- `TICKET-020`: completed on 2026-03-15. Progress submission now validates `hintsUsed` as an integer in the `0..3` range in both the shared schema and `ProgressService`, backed by a shared `HINTS_PER_PUZZLE` constant.
+- `TICKET-021`: completed on 2026-03-15. JWT signing now fails fast on missing secrets, `main.ts` validates required env vars before bootstrap, and `ConfigModule` now loads `backend/.env` before the repo root `.env`.
+- `TICKET-022`: completed on 2026-03-15. Backend CORS origins now read from optional `ALLOWED_ORIGINS`, with the existing localhost defaults preserved when the env var is unset.
+- `TICKET-023`: completed on 2026-03-15. Frontend Vitest + Testing Library infrastructure now exists with four passing baseline test files, workspace test scripts, and jsdom alias configuration.
+- `TICKET-024`: completed on 2026-03-15. Backend coverage gaps are now closed for the audited business-critical modules, with new `SubscriptionGuard` and `BillingService` specs plus extended decoder, streak, and progress tests; audited module line coverage now exceeds 60%.
+- `TICKET-025`: completed on 2026-03-15. Users can now upload avatar image files through `/api/users/avatar`, backend uploads are served from `backend/public`, settings includes preview/upload UI plus URL fallback, and avatar components now resolve backend-relative `/uploads/...` paths correctly.
+- `TICKET-026`: completed on 2026-03-15. Battle WebSocket handlers now validate incoming payloads against shared Zod schemas for `ping`, `join_lobby`, `leave_lobby`, `player_ready`, `progress_update`, and `submit_solution`, emitting `INVALID_PAYLOAD` errors instead of passing malformed data into the battle service.
+- `TICKET-027`: completed on 2026-03-15. Registration now generates hashed email-verification tokens and sends verification URLs through the new mail module, forgot-password now emails reset links instead of returning raw tokens, `/verify-email` plus resend-verification are live, and the original `TICKET-001` through `TICKET-027` backlog is now complete. `TICKET-028` remains a separate follow-up discovered during the audit.
 
 ---
 
@@ -48,23 +65,24 @@ Beyond critical bugs, several features are partially implemented (growth avatar,
 | Forgot password | Done | — | TICKET-008 | — | — |
 | Dashboard achievements | Done | — | TICKET-009 | — | — |
 | Battle socket reliability | Done | — | TICKET-010 | — | — |
-| Legal pages | ❌ Missing | — | — | TICKET-011 | — |
-| Decoder UI panel | ❌ Missing | — | — | TICKET-012 | — |
-| Admin RBAC | ❌ Missing | — | — | TICKET-013 | — |
-| Growth avatar system | ⚠️ Partial | — | — | TICKET-014 | — |
-| updatePuzzleSchema nulls | 🔴 Broken | — | — | TICKET-015 | — |
-| Remember me | ⚠️ Partial | — | — | TICKET-016 | — |
-| Landing page auth CTAs | 🔴 Broken | — | — | TICKET-017 | — |
-| Navbar upgrade CTA | ❌ Missing | — | — | — | TICKET-018 |
-| Error/loading/empty states | ⚠️ Partial | — | — | TICKET-019 | — |
-| Hints server validation | 🔴 Broken | — | — | TICKET-020 | — |
-| JWT secrets hardening | 🔴 Security | — | — | — | TICKET-021 |
-| CORS env config | ⚠️ Partial | — | — | — | TICKET-022 |
-| Frontend test infra | ❌ Missing | — | — | — | TICKET-023 |
-| Backend test coverage | ❓ Unknown | — | — | — | TICKET-024 |
-| Avatar upload | ❌ Missing | — | — | — | TICKET-025 |
-| WS input validation | ❌ Missing | — | — | — | TICKET-026 |
-| Email verification | ❌ Missing | — | — | — | TICKET-027 |
+| Legal pages | Done | — | — | TICKET-011 | — |
+| Challenge mode entitlement | 🔴 Broken | — | TICKET-028 | — | — |
+| Decoder UI panel | Done | — | — | TICKET-012 | — |
+| Admin RBAC | Done | — | — | TICKET-013 | — |
+| Growth avatar system | Done | — | — | TICKET-014 | — |
+| updatePuzzleSchema nulls | Done | — | — | TICKET-015 | — |
+| Remember me | Done | — | — | TICKET-016 | — |
+| Landing page auth CTAs | Done | — | — | TICKET-017 | — |
+| Navbar upgrade CTA | Done | — | — | — | TICKET-018 |
+| Error/loading/empty states | Done | — | — | TICKET-019 | — |
+| Hints server validation | Done | — | — | TICKET-020 | — |
+| JWT secrets hardening | Done | — | — | — | TICKET-021 |
+| CORS env config | Done | — | — | — | TICKET-022 |
+| Frontend test infra | Done | — | — | — | TICKET-023 |
+| Backend test coverage | Done | — | — | — | TICKET-024 |
+| Avatar upload | Done | — | — | — | TICKET-025 |
+| WS input validation | Done | — | — | — | TICKET-026 |
+| Email verification | Done | — | — | — | TICKET-027 |
 
 ---
 
@@ -83,6 +101,7 @@ Beyond critical bugs, several features are partially implemented (growth avatar,
 | TICKET-009 | Replace Hardcoded Dashboard Achievement Placeholders | P1 | bug | frontend | none |
 | TICKET-010 | Harden Battle WebSocket: Heartbeat, Reconnection, Null Guards | P1 | bug | frontend | TICKET-003 |
 | TICKET-011 | Create Legal Pages + Audit Challenge Mode | P2 | feature-gap | frontend | none |
+| TICKET-028 | Clarify and Enforce Challenge Mode Entitlement | P1 | mismatch | multi-area | TICKET-011 |
 | TICKET-012 | Add Cipher Reference Panel to Puzzle Solver | P2 | feature-gap | frontend | TICKET-001 |
 | TICKET-013 | Add Admin Role and Protect Content Endpoints | P2 | bug | multi-area | none |
 | TICKET-014 | Implement Growth Avatar Stage Progression | P2 | feature-gap | multi-area | none |
@@ -121,6 +140,7 @@ TICKET-007  Daily puzzle verify + fix     ← verify then fix
 TICKET-008  Forgot password flow          ← production blocker
 TICKET-009  Dashboard achievements data   ← quick win (1 hook call)
 TICKET-010  Battle socket hardening       ← after 003
+TICKET-028  Challenge mode entitlement    ← found during TICKET-011 audit
 ```
 
 ### Phase 2 — Feature Completeness

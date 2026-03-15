@@ -16,10 +16,21 @@ import {
   LogOut,
   Flame,
   Star,
+  Sparkles,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useAuthStore } from "@/stores";
-import { Button, Avatar, Dropdown, DropdownTrigger, DropdownContent, DropdownItem, DropdownSeparator, Skeleton } from "@/components/ui";
+import { useSubscriptionStatus } from "@/hooks/use-subscription";
+import {
+  Button,
+  Avatar,
+  Dropdown,
+  DropdownTrigger,
+  DropdownContent,
+  DropdownItem,
+  DropdownSeparator,
+  Skeleton,
+} from "@/components/ui";
 
 const navLinks = [
   { href: "/dashboard", label: "Dashboard", icon: BookOpen },
@@ -32,7 +43,9 @@ const navLinks = [
 export function Header() {
   const pathname = usePathname();
   const [mobileMenuOpen, setMobileMenuOpen] = React.useState(false);
-  const { user, isAuthenticated, logout, hasHydrated, isAuthReady } = useAuthStore();
+  const { user, isAuthenticated, logout, hasHydrated, isAuthReady } =
+    useAuthStore();
+  const { isFree, isLoading: subscriptionLoading } = useSubscriptionStatus();
   const isAuthPending = !hasHydrated || !isAuthReady;
 
   return (
@@ -52,7 +65,8 @@ export function Header() {
           {/* Desktop Navigation */}
           <nav className="hidden md:flex items-center gap-1">
             {navLinks.map((link) => {
-              const isActive = pathname === link.href || pathname?.startsWith(link.href + "/");
+              const isActive =
+                pathname === link.href || pathname?.startsWith(link.href + "/");
               const Icon = link.icon;
 
               return (
@@ -64,14 +78,18 @@ export function Header() {
                     "text-sm font-medium transition-colors",
                     isActive
                       ? "text-foreground"
-                      : "text-muted-foreground hover:text-foreground"
+                      : "text-muted-foreground hover:text-foreground",
                   )}
                 >
                   {isActive && (
                     <motion.div
                       layoutId="nav-indicator"
                       className="absolute inset-0 bg-white/10 rounded-lg"
-                      transition={{ type: "spring", stiffness: 500, damping: 30 }}
+                      transition={{
+                        type: "spring",
+                        stiffness: 500,
+                        damping: 30,
+                      }}
                     />
                   )}
                   <Icon className="h-4 w-4 relative z-10" />
@@ -90,6 +108,15 @@ export function Header() {
               </div>
             ) : isAuthenticated && user ? (
               <>
+                {!subscriptionLoading && isFree && (
+                  <Link href="/pricing" className="hidden md:block">
+                    <Button variant="outline" size="sm">
+                      <Sparkles className="h-3.5 w-3.5" />
+                      Upgrade
+                    </Button>
+                  </Link>
+                )}
+
                 {/* Streak Display */}
                 {user.streakDays > 0 && (
                   <div className="hidden sm:flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-orange-500/10 border border-orange-500/20">
@@ -110,7 +137,10 @@ export function Header() {
 
                 {/* User Dropdown */}
                 <Dropdown>
-                  <DropdownTrigger showChevron={false} className="p-0 bg-transparent border-0 hover:bg-transparent">
+                  <DropdownTrigger
+                    showChevron={false}
+                    className="p-0 bg-transparent border-0 hover:bg-transparent"
+                  >
                     <Avatar
                       src={user.avatarUrl}
                       alt={user.username}
@@ -120,8 +150,12 @@ export function Header() {
                   </DropdownTrigger>
                   <DropdownContent align="end">
                     <div className="px-4 py-3 border-b border-white/10">
-                      <p className="font-semibold text-foreground">{user.username}</p>
-                      <p className="text-sm text-muted-foreground">{user.email}</p>
+                      <p className="font-semibold text-foreground">
+                        {user.username}
+                      </p>
+                      <p className="text-sm text-muted-foreground">
+                        {user.email}
+                      </p>
                     </div>
                     <DropdownItem icon={<User className="h-4 w-4" />}>
                       <Link href="/profile">Profile</Link>
@@ -196,7 +230,7 @@ export function Header() {
                     "text-sm font-medium transition-colors",
                     isActive
                       ? "bg-white/10 text-foreground"
-                      : "text-muted-foreground hover:bg-white/5 hover:text-foreground"
+                      : "text-muted-foreground hover:bg-white/5 hover:text-foreground",
                   )}
                 >
                   <Icon className="h-5 w-5" />
@@ -204,6 +238,20 @@ export function Header() {
                 </Link>
               );
             })}
+
+            {!isAuthPending &&
+              isAuthenticated &&
+              !subscriptionLoading &&
+              isFree && (
+                <Link
+                  href="/pricing"
+                  onClick={() => setMobileMenuOpen(false)}
+                  className="flex items-center gap-3 px-4 py-3 rounded-lg text-sm font-medium text-amber-300 hover:bg-amber-500/10 hover:text-amber-200 transition-colors"
+                >
+                  <Sparkles className="h-5 w-5" />
+                  Upgrade to Pro
+                </Link>
+              )}
           </nav>
         </motion.div>
       </div>

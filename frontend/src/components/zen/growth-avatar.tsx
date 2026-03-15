@@ -1,19 +1,17 @@
-'use client';
+"use client";
 
-import { motion } from 'framer-motion';
-import { useMemo } from 'react';
+import * as React from "react";
+import { motion } from "framer-motion";
+import { getGrowthProgress, getGrowthStageLabel } from "@/lib/growth";
 
 interface GrowthAvatarProps {
   growthPoints: number;
   growthStage: number;
-  size?: 'sm' | 'md' | 'lg' | 'xl';
+  size?: "sm" | "md" | "lg" | "xl";
   showLabel?: boolean;
   animated?: boolean;
   className?: string;
 }
-
-const stageNames = ['Seed', 'Sprout', 'Sapling', 'Young Tree', 'Mature Tree'];
-const stageThresholds = [0, 100, 500, 1500, 5000]; // Points needed for each stage
 
 const sizeMap = {
   sm: { width: 80, height: 100 },
@@ -29,19 +27,14 @@ const sizeMap = {
 export function GrowthAvatar({
   growthPoints,
   growthStage,
-  size = 'md',
+  size = "md",
   showLabel = true,
   animated = true,
-  className = '',
+  className = "",
 }: GrowthAvatarProps) {
   const dimensions = sizeMap[size];
-  const stageName = stageNames[growthStage - 1] || 'Seed';
-  const nextStagePoints = stageThresholds[growthStage] || stageThresholds[4];
-  const currentStagePoints = stageThresholds[growthStage - 1] || 0;
-  const progress =
-    growthStage >= 5
-      ? 100
-      : ((growthPoints - currentStagePoints) / (nextStagePoints - currentStagePoints)) * 100;
+  const stageName = getGrowthStageLabel(growthStage);
+  const progress = getGrowthProgress(growthPoints, growthStage);
 
   return (
     <div className={`flex flex-col items-center ${className}`}>
@@ -67,7 +60,7 @@ export function GrowthAvatar({
           transition={{
             duration: 3,
             repeat: Infinity,
-            ease: 'easeInOut',
+            ease: "easeInOut",
           }}
         />
 
@@ -75,7 +68,7 @@ export function GrowthAvatar({
         <svg
           viewBox="0 0 100 125"
           className="w-full h-full"
-          style={{ filter: 'drop-shadow(0 4px 6px rgba(0, 0, 0, 0.3))' }}
+          style={{ filter: "drop-shadow(0 4px 6px rgba(0, 0, 0, 0.3))" }}
         >
           {/* Ground */}
           <ellipse
@@ -114,7 +107,7 @@ export function GrowthAvatar({
           {growthStage < 5 && (
             <div className="mt-2 w-32">
               <div className="flex justify-between text-xs text-white/40 mb-1">
-                <span>Next: {stageNames[growthStage]}</span>
+                <span>Next: {getGrowthStageLabel(growthStage + 1)}</span>
                 <span>{Math.round(progress)}%</span>
               </div>
               <div className="h-1.5 bg-white/10 rounded-full overflow-hidden">
@@ -122,7 +115,7 @@ export function GrowthAvatar({
                   className="h-full bg-gradient-to-r from-green-500 to-emerald-400 rounded-full"
                   initial={{ width: 0 }}
                   animate={{ width: `${progress}%` }}
-                  transition={{ duration: 1, ease: 'easeOut' }}
+                  transition={{ duration: 1, ease: "easeOut" }}
                 />
               </div>
             </div>
@@ -176,14 +169,14 @@ function SproutStage({ animated }: { animated: boolean }) {
         fill="#32CD32"
         animate={animated ? { rotate: [-5, 5, -5] } : {}}
         transition={{ duration: 3, repeat: Infinity }}
-        style={{ transformOrigin: '50px 85px' }}
+        style={{ transformOrigin: "50px 85px" }}
       />
       <motion.path
         d="M 50 85 Q 65 80 60 70 Q 50 75 50 85"
         fill="#32CD32"
         animate={animated ? { rotate: [5, -5, 5] } : {}}
         transition={{ duration: 3, repeat: Infinity, delay: 0.5 }}
-        style={{ transformOrigin: '50px 85px' }}
+        style={{ transformOrigin: "50px 85px" }}
       />
     </g>
   );
@@ -205,18 +198,28 @@ function SaplingStage({ animated }: { animated: boolean }) {
       <motion.g
         animate={animated ? { rotate: [-2, 2, -2] } : {}}
         transition={{ duration: 4, repeat: Infinity }}
-        style={{ transformOrigin: '50px 70px' }}
+        style={{ transformOrigin: "50px 70px" }}
       >
-        <path d="M 50 70 Q 30 65 25 55" stroke="#8B4513" strokeWidth="3" fill="none" />
+        <path
+          d="M 50 70 Q 30 65 25 55"
+          stroke="#8B4513"
+          strokeWidth="3"
+          fill="none"
+        />
         <circle cx="25" cy="50" r="12" fill="#228B22" />
         <circle cx="20" cy="55" r="8" fill="#32CD32" />
       </motion.g>
       <motion.g
         animate={animated ? { rotate: [2, -2, 2] } : {}}
         transition={{ duration: 4, repeat: Infinity, delay: 0.5 }}
-        style={{ transformOrigin: '50px 70px' }}
+        style={{ transformOrigin: "50px 70px" }}
       >
-        <path d="M 50 70 Q 70 65 75 55" stroke="#8B4513" strokeWidth="3" fill="none" />
+        <path
+          d="M 50 70 Q 70 65 75 55"
+          stroke="#8B4513"
+          strokeWidth="3"
+          fill="none"
+        />
         <circle cx="75" cy="50" r="12" fill="#228B22" />
         <circle cx="80" cy="55" r="8" fill="#32CD32" />
       </motion.g>
@@ -232,11 +235,37 @@ function YoungTreeStage({ animated }: { animated: boolean }) {
   return (
     <g>
       {/* Trunk */}
-      <path d="M 50 115 Q 50 70 50 45" stroke="#654321" strokeWidth="8" fill="none" strokeLinecap="round" />
-      <path d="M 50 75 Q 30 70 20 60" stroke="#654321" strokeWidth="4" fill="none" />
-      <path d="M 50 75 Q 70 70 80 60" stroke="#654321" strokeWidth="4" fill="none" />
-      <path d="M 50 55 Q 35 50 30 40" stroke="#654321" strokeWidth="3" fill="none" />
-      <path d="M 50 55 Q 65 50 70 40" stroke="#654321" strokeWidth="3" fill="none" />
+      <path
+        d="M 50 115 Q 50 70 50 45"
+        stroke="#654321"
+        strokeWidth="8"
+        fill="none"
+        strokeLinecap="round"
+      />
+      <path
+        d="M 50 75 Q 30 70 20 60"
+        stroke="#654321"
+        strokeWidth="4"
+        fill="none"
+      />
+      <path
+        d="M 50 75 Q 70 70 80 60"
+        stroke="#654321"
+        strokeWidth="4"
+        fill="none"
+      />
+      <path
+        d="M 50 55 Q 35 50 30 40"
+        stroke="#654321"
+        strokeWidth="3"
+        fill="none"
+      />
+      <path
+        d="M 50 55 Q 65 50 70 40"
+        stroke="#654321"
+        strokeWidth="3"
+        fill="none"
+      />
 
       {/* Foliage */}
       <motion.g
@@ -259,20 +288,52 @@ function MatureTreeStage({ animated }: { animated: boolean }) {
   return (
     <g>
       {/* Trunk */}
-      <path d="M 45 115 Q 45 80 48 35" stroke="#4a3728" strokeWidth="12" fill="none" strokeLinecap="round" />
-      <path d="M 55 115 Q 55 80 52 35" stroke="#5a4738" strokeWidth="10" fill="none" strokeLinecap="round" />
+      <path
+        d="M 45 115 Q 45 80 48 35"
+        stroke="#4a3728"
+        strokeWidth="12"
+        fill="none"
+        strokeLinecap="round"
+      />
+      <path
+        d="M 55 115 Q 55 80 52 35"
+        stroke="#5a4738"
+        strokeWidth="10"
+        fill="none"
+        strokeLinecap="round"
+      />
 
       {/* Major branches */}
-      <path d="M 48 70 Q 20 60 10 45" stroke="#4a3728" strokeWidth="6" fill="none" />
-      <path d="M 52 70 Q 80 60 90 45" stroke="#4a3728" strokeWidth="6" fill="none" />
-      <path d="M 48 50 Q 25 40 15 25" stroke="#4a3728" strokeWidth="4" fill="none" />
-      <path d="M 52 50 Q 75 40 85 25" stroke="#4a3728" strokeWidth="4" fill="none" />
+      <path
+        d="M 48 70 Q 20 60 10 45"
+        stroke="#4a3728"
+        strokeWidth="6"
+        fill="none"
+      />
+      <path
+        d="M 52 70 Q 80 60 90 45"
+        stroke="#4a3728"
+        strokeWidth="6"
+        fill="none"
+      />
+      <path
+        d="M 48 50 Q 25 40 15 25"
+        stroke="#4a3728"
+        strokeWidth="4"
+        fill="none"
+      />
+      <path
+        d="M 52 50 Q 75 40 85 25"
+        stroke="#4a3728"
+        strokeWidth="4"
+        fill="none"
+      />
 
       {/* Dense foliage */}
       <motion.g
         animate={animated ? { scale: [1, 1.02, 1], rotate: [-1, 1, -1] } : {}}
         transition={{ duration: 6, repeat: Infinity }}
-        style={{ transformOrigin: '50px 40px' }}
+        style={{ transformOrigin: "50px 40px" }}
       >
         <ellipse cx="50" cy="30" rx="45" ry="35" fill="#1a5c1a" />
         <ellipse cx="25" cy="40" rx="25" ry="22" fill="#228B22" />
@@ -289,19 +350,25 @@ function MatureTreeStage({ animated }: { animated: boolean }) {
       {animated && (
         <>
           <motion.circle
-            cx="30" cy="35" r="4"
+            cx="30"
+            cy="35"
+            r="4"
             fill="#FFD700"
             animate={{ opacity: [0.8, 1, 0.8] }}
             transition={{ duration: 2, repeat: Infinity }}
           />
           <motion.circle
-            cx="70" cy="35" r="4"
+            cx="70"
+            cy="35"
+            r="4"
             fill="#FFD700"
             animate={{ opacity: [0.8, 1, 0.8] }}
             transition={{ duration: 2, repeat: Infinity, delay: 0.5 }}
           />
           <motion.circle
-            cx="50" cy="20" r="4"
+            cx="50"
+            cy="20"
+            r="4"
             fill="#FFD700"
             animate={{ opacity: [0.8, 1, 0.8] }}
             transition={{ duration: 2, repeat: Infinity, delay: 1 }}
@@ -314,8 +381,18 @@ function MatureTreeStage({ animated }: { animated: boolean }) {
 
 // Floating leaves effect
 function FloatingLeaves({ count }: { count: number }) {
-  const leaves = useMemo(
-    () =>
+  const [leaves, setLeaves] = React.useState<
+    Array<{
+      id: number;
+      x: number;
+      delay: number;
+      duration: number;
+      size: number;
+    }>
+  >([]);
+
+  React.useEffect(() => {
+    setLeaves(
       Array.from({ length: count }, (_, i) => ({
         id: i,
         x: Math.random() * 100,
@@ -323,8 +400,8 @@ function FloatingLeaves({ count }: { count: number }) {
         duration: 5 + Math.random() * 5,
         size: 4 + Math.random() * 4,
       })),
-    [count]
-  );
+    );
+  }, [count]);
 
   return (
     <div className="absolute inset-0 pointer-events-none overflow-hidden">
@@ -334,13 +411,13 @@ function FloatingLeaves({ count }: { count: number }) {
           className="absolute"
           style={{
             left: `${leaf.x}%`,
-            top: '20%',
+            top: "20%",
             width: leaf.size,
             height: leaf.size,
           }}
           animate={{
-            y: ['0%', '300%'],
-            x: ['-10%', '10%', '-10%'],
+            y: ["0%", "300%"],
+            x: ["-10%", "10%", "-10%"],
             rotate: [0, 180, 360],
             opacity: [0, 1, 0],
           }}
@@ -348,15 +425,11 @@ function FloatingLeaves({ count }: { count: number }) {
             duration: leaf.duration,
             delay: leaf.delay,
             repeat: Infinity,
-            ease: 'linear',
+            ease: "linear",
           }}
         >
           <svg viewBox="0 0 10 10" className="w-full h-full">
-            <path
-              d="M 5 0 Q 8 3 5 10 Q 2 3 5 0"
-              fill="#32CD32"
-              opacity="0.6"
-            />
+            <path d="M 5 0 Q 8 3 5 10 Q 2 3 5 0" fill="#32CD32" opacity="0.6" />
           </svg>
         </motion.div>
       ))}
@@ -370,13 +443,13 @@ function FloatingLeaves({ count }: { count: number }) {
 export function GrowthAvatarMini({
   growthStage,
   growthPoints,
-  className = '',
+  className = "",
 }: {
   growthStage: number;
   growthPoints: number;
   className?: string;
 }) {
-  const stageName = stageNames[growthStage - 1] || 'Seed';
+  const stageName = getGrowthStageLabel(growthStage);
 
   return (
     <div className={`flex items-center gap-2 ${className}`}>

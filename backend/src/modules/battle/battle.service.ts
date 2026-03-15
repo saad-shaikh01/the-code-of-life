@@ -206,14 +206,21 @@ export class BattleService {
     const lobby = this.lobbies.get(lobbyId);
     if (!lobby) throw new Error('Lobby not found');
 
-    // Get a random puzzle of the specified difficulty
-    const puzzles = await this.prisma.puzzle.findMany({
+    // Get a random puzzle of the specified difficulty, fall back to any CHALLENGE puzzle
+    let puzzles = await this.prisma.puzzle.findMany({
       where: {
         difficulty: lobby.difficulty,
         gameMode: 'CHALLENGE',
       },
       take: 10,
     });
+
+    if (puzzles.length === 0) {
+      puzzles = await this.prisma.puzzle.findMany({
+        where: { gameMode: 'CHALLENGE' },
+        take: 10,
+      });
+    }
 
     if (puzzles.length === 0) {
       throw new Error('No puzzles available');

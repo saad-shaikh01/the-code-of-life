@@ -2,11 +2,30 @@
 
 import * as React from "react";
 import { motion } from "framer-motion";
-import { Trophy, Medal, Crown, Star, Flame, ChevronUp, ChevronDown, Minus } from "lucide-react";
-import { useLeaderboard, useUserRank, useGlobalStats, useStreakLeaderboard, useLevelLeaderboard } from "@/hooks";
+import { Trophy, Medal, Crown, Star, Flame } from "lucide-react";
+import {
+  useLeaderboard,
+  useUserRank,
+  useGlobalStats,
+  useStreakLeaderboard,
+  useLevelLeaderboard,
+} from "@/hooks";
 import { useAuthStore } from "@/stores";
 import { PageHeader } from "@/components/layout";
-import { Card, CardHeader, CardTitle, CardContent, Avatar, Skeleton, Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui";
+import {
+  Avatar,
+  Card,
+  CardContent,
+  CardHeader,
+  CardTitle,
+  EmptyState,
+  QueryError,
+  Skeleton,
+  Tabs,
+  TabsContent,
+  TabsList,
+  TabsTrigger,
+} from "@/components/ui";
 import { cn } from "@/lib/utils";
 import type { LeaderboardEntry, LeaderboardPeriod } from "@/types/api.types";
 
@@ -30,7 +49,13 @@ const itemVariants = {
   show: { opacity: 1, x: 0 },
 };
 
-function LeaderboardRow({ entry, currentUserId, index }: { entry: LeaderboardEntry; currentUserId?: string; index: number }) {
+function LeaderboardRow({
+  entry,
+  currentUserId,
+}: {
+  entry: LeaderboardEntry;
+  currentUserId?: string;
+}) {
   const isCurrentUser = entry.userId === currentUserId;
   const isTopThree = entry.rank <= 3;
 
@@ -43,7 +68,9 @@ function LeaderboardRow({ entry, currentUserId, index }: { entry: LeaderboardEnt
       case 3:
         return <Medal className="h-5 w-5 text-amber-600" />;
       default:
-        return <span className="text-muted-foreground font-medium">{rank}</span>;
+        return (
+          <span className="text-muted-foreground font-medium">{rank}</span>
+        );
     }
   };
 
@@ -52,8 +79,12 @@ function LeaderboardRow({ entry, currentUserId, index }: { entry: LeaderboardEnt
       variants={itemVariants}
       className={cn(
         "flex items-center gap-4 p-4 rounded-xl",
-        isCurrentUser ? "bg-amber-500/10 border border-amber-500/20" : "bg-white/5",
-        isTopThree && !isCurrentUser && "bg-gradient-to-r from-white/5 to-transparent"
+        isCurrentUser
+          ? "bg-amber-500/10 border border-amber-500/20"
+          : "bg-white/5",
+        isTopThree &&
+          !isCurrentUser &&
+          "bg-gradient-to-r from-white/5 to-transparent",
       )}
     >
       {/* Rank */}
@@ -69,10 +100,12 @@ function LeaderboardRow({ entry, currentUserId, index }: { entry: LeaderboardEnt
         size="md"
       />
       <div className="flex-1 min-w-0">
-        <p className={cn(
-          "font-medium truncate",
-          isCurrentUser ? "text-amber-400" : "text-foreground"
-        )}>
+        <p
+          className={cn(
+            "font-medium truncate",
+            isCurrentUser ? "text-amber-400" : "text-foreground",
+          )}
+        >
           {entry.username}
           {isCurrentUser && <span className="text-xs ml-2">(You)</span>}
         </p>
@@ -90,10 +123,12 @@ function LeaderboardRow({ entry, currentUserId, index }: { entry: LeaderboardEnt
 
       {/* Score */}
       <div className="text-right">
-        <p className={cn(
-          "text-lg font-bold",
-          isTopThree ? "text-amber-400" : "text-foreground"
-        )}>
+        <p
+          className={cn(
+            "text-lg font-bold",
+            isTopThree ? "text-amber-400" : "text-foreground",
+          )}
+        >
           {entry.score.toLocaleString()}
         </p>
         <p className="text-xs text-muted-foreground">
@@ -108,21 +143,48 @@ export default function LeaderboardsPage() {
   const [period, setPeriod] = React.useState<LeaderboardPeriod>("all");
   const { user } = useAuthStore();
 
-  const { data: leaderboardData, isLoading: leaderboardLoading } = useLeaderboard({ period, limit: 50 });
-  const { data: userRankData } = useUserRank();
-  const { data: globalStatsData, isLoading: statsLoading } = useGlobalStats();
-  const { data: streakData, isLoading: streakLoading } = useStreakLeaderboard();
-  const { data: levelData, isLoading: levelLoading } = useLevelLeaderboard();
+  const {
+    data: leaderboardData,
+    isLoading: leaderboardLoading,
+    error: leaderboardError,
+    refetch: refetchLeaderboard,
+  } = useLeaderboard({ period, limit: 50 });
+  const {
+    data: userRankData,
+    error: userRankError,
+    refetch: refetchUserRank,
+  } = useUserRank();
+  const {
+    data: globalStatsData,
+    isLoading: statsLoading,
+    error: globalStatsError,
+    refetch: refetchGlobalStats,
+  } = useGlobalStats();
+  const {
+    data: streakData,
+    isLoading: streakLoading,
+    error: streakError,
+    refetch: refetchStreak,
+  } = useStreakLeaderboard();
+  const {
+    data: levelData,
+    isLoading: levelLoading,
+    error: levelError,
+    refetch: refetchLevel,
+  } = useLevelLeaderboard();
 
   const leaderboard = leaderboardData?.data;
   const userRank = userRankData?.data?.rank;
   const globalStats = globalStatsData?.data;
+  const statsError = globalStatsError ?? userRankError;
+
+  const handleStatsRetry = () => {
+    void refetchGlobalStats();
+    void refetchUserRank();
+  };
 
   return (
-    <motion.div
-      initial={{ opacity: 0 }}
-      animate={{ opacity: 1 }}
-    >
+    <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }}>
       <PageHeader
         title="Leaderboards"
         subtitle="Compete with players worldwide"
@@ -136,6 +198,17 @@ export default function LeaderboardsPage() {
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">
         {statsLoading ? (
           [1, 2, 3, 4].map((i) => <Skeleton key={i} className="h-24" />)
+        ) : statsError ? (
+          <div className="col-span-full">
+            <QueryError
+              message={
+                statsError instanceof Error
+                  ? statsError.message
+                  : "Failed to load leaderboard stats. Please try again."
+              }
+              onRetry={handleStatsRetry}
+            />
+          </div>
         ) : (
           <>
             <Card variant="glass">
@@ -143,7 +216,9 @@ export default function LeaderboardsPage() {
                 <div className="text-2xl font-bold text-amber-400">
                   {globalStats?.totalPlayers?.toLocaleString() || 0}
                 </div>
-                <div className="text-xs text-muted-foreground">Total Players</div>
+                <div className="text-xs text-muted-foreground">
+                  Total Players
+                </div>
               </CardContent>
             </Card>
             <Card variant="glass">
@@ -151,7 +226,9 @@ export default function LeaderboardsPage() {
                 <div className="text-2xl font-bold text-violet-400">
                   {globalStats?.totalPuzzlesCompleted?.toLocaleString() || 0}
                 </div>
-                <div className="text-xs text-muted-foreground">Puzzles Solved</div>
+                <div className="text-xs text-muted-foreground">
+                  Puzzles Solved
+                </div>
               </CardContent>
             </Card>
             <Card variant="glass">
@@ -187,7 +264,10 @@ export default function LeaderboardsPage() {
               </div>
             </CardHeader>
             <CardContent>
-              <Tabs value={period} onValueChange={(v) => setPeriod(v as LeaderboardPeriod)}>
+              <Tabs
+                value={period}
+                onValueChange={(v) => setPeriod(v as LeaderboardPeriod)}
+              >
                 <TabsList className="mb-4">
                   {periods.map((p) => (
                     <TabsTrigger key={p.value} value={p.value}>
@@ -204,27 +284,39 @@ export default function LeaderboardsPage() {
                           <Skeleton key={i} className="h-16" />
                         ))}
                       </div>
-                    ) : leaderboard?.entries && leaderboard.entries.length > 0 ? (
+                    ) : leaderboardError ? (
+                      <QueryError
+                        message={
+                          leaderboardError instanceof Error
+                            ? leaderboardError.message
+                            : "Failed to load leaderboard data. Please try again."
+                        }
+                        onRetry={() => {
+                          void refetchLeaderboard();
+                        }}
+                      />
+                    ) : leaderboard?.entries &&
+                      leaderboard.entries.length > 0 ? (
                       <motion.div
                         variants={containerVariants}
                         initial="hidden"
                         animate="show"
                         className="space-y-2"
                       >
-                        {leaderboard.entries.map((entry, index) => (
+                        {leaderboard.entries.map((entry) => (
                           <LeaderboardRow
                             key={entry.userId}
                             entry={entry}
                             currentUserId={user?.id}
-                            index={index}
                           />
                         ))}
                       </motion.div>
                     ) : (
-                      <div className="text-center py-12">
-                        <Trophy className="h-12 w-12 mx-auto text-muted-foreground/50 mb-4" />
-                        <p className="text-muted-foreground">No leaderboard data available for this period.</p>
-                      </div>
+                      <EmptyState
+                        icon={Trophy}
+                        title="No leaderboard data yet"
+                        description="No entries are available for this period yet. Check back after more players post scores."
+                      />
                     )}
                   </TabsContent>
                 ))}
@@ -250,33 +342,62 @@ export default function LeaderboardsPage() {
                     <Skeleton key={i} className="h-10" />
                   ))}
                 </div>
-              ) : streakData?.data && Array.isArray(streakData.data) && streakData.data.length > 0 ? (
+              ) : streakError ? (
+                <QueryError
+                  message={
+                    streakError instanceof Error
+                      ? streakError.message
+                      : "Failed to load streak leaderboard. Please try again."
+                  }
+                  onRetry={() => {
+                    void refetchStreak();
+                  }}
+                />
+              ) : streakData?.data &&
+                Array.isArray(streakData.data) &&
+                streakData.data.length > 0 ? (
                 <div className="space-y-2">
-                  {(streakData.data as LeaderboardEntry[]).slice(0, 5).map((entry, i) => (
-                    <div
-                      key={entry.userId}
-                      className={cn(
-                        "flex items-center gap-3 p-2 rounded-lg",
-                        entry.userId === user?.id ? "bg-orange-500/10" : "bg-white/5"
-                      )}
-                    >
-                      <span className={cn(
-                        "w-6 text-center font-medium",
-                        i < 3 ? "text-orange-400" : "text-muted-foreground"
-                      )}>
-                        {i + 1}
-                      </span>
-                      <Avatar src={entry.avatarUrl} alt={entry.username} size="sm" />
-                      <span className="flex-1 truncate text-sm">{entry.username}</span>
-                      <span className="text-sm font-semibold text-orange-400">
-                        {entry.streakDays}
-                        <Flame className="h-3 w-3 inline ml-1" />
-                      </span>
-                    </div>
-                  ))}
+                  {(streakData.data as LeaderboardEntry[])
+                    .slice(0, 5)
+                    .map((entry, i) => (
+                      <div
+                        key={entry.userId}
+                        className={cn(
+                          "flex items-center gap-3 p-2 rounded-lg",
+                          entry.userId === user?.id
+                            ? "bg-orange-500/10"
+                            : "bg-white/5",
+                        )}
+                      >
+                        <span
+                          className={cn(
+                            "w-6 text-center font-medium",
+                            i < 3 ? "text-orange-400" : "text-muted-foreground",
+                          )}
+                        >
+                          {i + 1}
+                        </span>
+                        <Avatar
+                          src={entry.avatarUrl}
+                          alt={entry.username}
+                          size="sm"
+                        />
+                        <span className="flex-1 truncate text-sm">
+                          {entry.username}
+                        </span>
+                        <span className="text-sm font-semibold text-orange-400">
+                          {entry.streakDays}
+                          <Flame className="h-3 w-3 inline ml-1" />
+                        </span>
+                      </div>
+                    ))}
                 </div>
               ) : (
-                <p className="text-sm text-muted-foreground text-center py-4">No streak data</p>
+                <EmptyState
+                  icon={Flame}
+                  title="No streak data yet"
+                  description="No streak leaderboard entries are available yet."
+                />
               )}
             </CardContent>
           </Card>
@@ -296,32 +417,61 @@ export default function LeaderboardsPage() {
                     <Skeleton key={i} className="h-10" />
                   ))}
                 </div>
-              ) : levelData?.data && Array.isArray(levelData.data) && levelData.data.length > 0 ? (
+              ) : levelError ? (
+                <QueryError
+                  message={
+                    levelError instanceof Error
+                      ? levelError.message
+                      : "Failed to load level leaderboard. Please try again."
+                  }
+                  onRetry={() => {
+                    void refetchLevel();
+                  }}
+                />
+              ) : levelData?.data &&
+                Array.isArray(levelData.data) &&
+                levelData.data.length > 0 ? (
                 <div className="space-y-2">
-                  {(levelData.data as LeaderboardEntry[]).slice(0, 5).map((entry, i) => (
-                    <div
-                      key={entry.userId}
-                      className={cn(
-                        "flex items-center gap-3 p-2 rounded-lg",
-                        entry.userId === user?.id ? "bg-violet-500/10" : "bg-white/5"
-                      )}
-                    >
-                      <span className={cn(
-                        "w-6 text-center font-medium",
-                        i < 3 ? "text-violet-400" : "text-muted-foreground"
-                      )}>
-                        {i + 1}
-                      </span>
-                      <Avatar src={entry.avatarUrl} alt={entry.username} size="sm" />
-                      <span className="flex-1 truncate text-sm">{entry.username}</span>
-                      <span className="text-sm font-semibold text-violet-400">
-                        Lvl {entry.currentLevel}
-                      </span>
-                    </div>
-                  ))}
+                  {(levelData.data as LeaderboardEntry[])
+                    .slice(0, 5)
+                    .map((entry, i) => (
+                      <div
+                        key={entry.userId}
+                        className={cn(
+                          "flex items-center gap-3 p-2 rounded-lg",
+                          entry.userId === user?.id
+                            ? "bg-violet-500/10"
+                            : "bg-white/5",
+                        )}
+                      >
+                        <span
+                          className={cn(
+                            "w-6 text-center font-medium",
+                            i < 3 ? "text-violet-400" : "text-muted-foreground",
+                          )}
+                        >
+                          {i + 1}
+                        </span>
+                        <Avatar
+                          src={entry.avatarUrl}
+                          alt={entry.username}
+                          size="sm"
+                        />
+                        <span className="flex-1 truncate text-sm">
+                          {entry.username}
+                        </span>
+                        <span className="text-sm font-semibold text-violet-400">
+                          Lvl {entry.currentLevel}
+                        </span>
+                      </div>
+                    ))}
                 </div>
               ) : (
-                <p className="text-sm text-muted-foreground text-center py-4">No level data</p>
+                <EmptyState
+                  icon={Star}
+                  title="No level data yet"
+                  description="No level leaderboard entries are available yet."
+                />
               )}
             </CardContent>
           </Card>

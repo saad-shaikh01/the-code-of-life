@@ -5,116 +5,110 @@
 - **Priority:** P2
 - **Type:** bug
 - **Area:** frontend
-- **Status:** open
-- **Dependencies:** TICKET-002 (auth hydration must be complete first)
+- **Status:** done
+- **Dependencies:** TICKET-002
 
 ---
 
 ## Problem
-The landing page (`page.tsx:69-74`) always shows "Sign In" and "Get Started" buttons, regardless of whether the user is already logged in. A logged-in user opening the landing page in a new tab sees login CTAs — as if they don't have an account — instead of being directed to their dashboard.
-
-This is closely related to (but distinct from) TICKET-002. TICKET-002 fixes the underlying auth hydration so that `isAuthenticated` is reliable on page load. This ticket uses that reliable state to conditionally render the correct CTA.
-
-**Do not implement this ticket until TICKET-002 is merged**, because without auth hydration, the CTA would flash "Sign In" and then switch to "Go to Dashboard" — worse UX than the current state.
+The landing page still showed logged-out CTAs to authenticated users. Even after auth hydration was fixed, returning users could still land on `/` and see register-style calls to action instead of a direct path back into the game.
 
 ---
 
 ## Why This Matters
-Reported in `issues.md` line 1. A logged-in user clicking "Sign In" will be sent to the login page unnecessarily. The landing page should serve as a re-entry point for returning users — prominently directing them to continue playing.
+The landing page is a re-entry point for returning users. Once authentication state is hydrated, logged-in users should be directed to continue playing instead of being prompted to sign in or register again.
 
 ---
 
 ## Evidence
-- `frontend/src/app/page.tsx:69-74` — hardcoded Sign In + Get Started links, no auth check
-- `issues.md` line 1: "landing page par phr b signin or register wale buttons display ho rahe ha"
-- `frontend/src/stores/auth.store.ts` — `isAuthenticated` and `user` are available
+- `frontend/src/app/page.tsx` used `LandingAuthActions` in the nav, but the authenticated state still rendered multiple buttons instead of the required single dashboard CTA
+- the hero and lower CTA sections still hardcoded register buttons
+- `frontend/src/components/layout/landing-auth-actions.tsx` already had hydration-aware placeholder logic from `TICKET-002`, so this ticket only needed to extend that component and reuse it consistently
 
 ---
 
 ## Scope
-
-Make `page.tsx` a client component (add `"use client"` directive) and conditionally render nav CTAs:
-
-```tsx
-"use client";
-
-import { useAuthStore } from "@/stores";
-
-export default function LandingPage() {
-  const { isAuthenticated, isLoading } = useAuthStore();
-
-  return (
-    // ...existing layout...
-    <nav>
-      {/* Logo */}
-      <div className="flex items-center gap-4">
-        {isLoading ? (
-          <div className="w-24 h-9 bg-white/10 rounded animate-pulse" />
-        ) : isAuthenticated ? (
-          <Link href="/dashboard">
-            <Button variant="primary">Go to Dashboard</Button>
-          </Link>
-        ) : (
-          <>
-            <Link href="/login">
-              <Button variant="ghost">Sign In</Button>
-            </Link>
-            <Link href="/register">
-              <Button variant="primary">Get Started</Button>
-            </Link>
-          </>
-        )}
-      </div>
-    </nav>
-  );
-}
-```
-
-Also update any other instances on the landing page where "Sign In" or "Get Started" appear as CTAs (e.g., in the hero section) to use the same conditional logic.
+1. Keep landing CTA rendering hydration-aware
+2. Show a single `Go to Dashboard` action for authenticated users
+3. Keep logged-out users on the existing register/sign-in flow
+4. Reuse the same auth-aware CTA behavior across all landing-page CTA areas
 
 ---
 
 ## Out of Scope
-- Redesigning the landing page
-- Navbar changes for authenticated users inside `/(main)/` (that's the header component)
-- Landing page content/copy changes
+- Landing page redesign
+- Header behavior inside protected routes
+- Landing page copy changes beyond the CTA swap
 
 ---
 
 ## Implementation Notes
-- Converting `page.tsx` to `"use client"` means it no longer benefits from server-side rendering for SEO. For a game landing page this is acceptable; if SEO is important in the future, consider splitting the auth-conditional nav into a separate client component and keeping the rest of the page as server-rendered.
-- The `isLoading` state from `useAuthStore` should be `true` while `AuthInitializer` (from TICKET-002) runs `refreshUser()`. Show a skeleton/pulse in the CTA area during this window.
-- After TICKET-002 is done, `isLoading` transitions from `true` → `false` within one API round-trip. The flash will be minimal (skeleton → correct button).
+- `page.tsx` was already a client component, so no conversion was needed.
+- Reused the existing `LandingAuthActions` component instead of adding new page-level auth conditionals.
+- Updated `LandingAuthActions` to support:
+  - `mode="nav"` for the top-right navigation area
+  - `mode="single"` for the hero and lower CTA sections
+- Hydration behavior remains unchanged:
+  - while auth is not ready, CTA areas render neutral skeleton placeholders
+- Authenticated behavior is now consistent across the landing page:
+  - authenticated users see a single `Go to Dashboard` button
+  - logged-out users still see `Sign In + Get Started` in the nav
+  - logged-out users still see the register-style CTAs in the hero and lower CTA sections
+- Removed the authenticated `Profile` button from the landing-nav CTA component because the ticket required a single dashboard CTA for logged-in users.
 
 ---
 
 ## Acceptance Criteria
-- [ ] Logged-in user opening `/` sees "Go to Dashboard" button (not Sign In / Get Started)
-- [ ] Logged-out user opening `/` sees Sign In + Get Started buttons
-- [ ] During auth check (loading state), CTA area shows a skeleton/pulse placeholder (no flash)
-- [ ] "Go to Dashboard" links to `/dashboard` and works correctly
+- [x] Logged-in user opening `/` sees `Go to Dashboard` instead of `Sign In / Get Started`
+- [x] Logged-out user opening `/` sees `Sign In + Get Started` in the nav
+- [x] During auth check, the CTA area shows skeleton placeholders with no unauthenticated flash
+- [x] `Go to Dashboard` links to `/dashboard`
+- [x] Other landing-page register CTAs now follow the same authenticated/dashboard behavior
 
 ---
 
 ## Testing Requirements
-- **Manual QA:**
-  1. Log in → open `/` in a new tab → verify "Go to Dashboard" shown
-  2. Log out → open `/` → verify Sign In / Get Started shown
-  3. Observe loading state briefly — verify no jarring flash
-- **Regression:** Existing landing page sections (hero, features, pricing preview) must not be affected
+- **Automated validation run:**
+  - targeted ESLint on touched landing-page files
+  - `frontend` production build
+- **Manual QA recommended:**
+  1. Log in, open `/` in a new tab, and confirm all primary landing CTAs resolve to `Go to Dashboard`
+  2. Log out, open `/`, and confirm the logged-out CTA set returns
+  3. Refresh during hydration and confirm only placeholders show before auth resolves
 
 ---
 
 ## Affected Areas
 - `frontend/src/app/page.tsx`
+- `frontend/src/components/layout/landing-auth-actions.tsx`
 
 ---
 
 ## Risks / Edge Cases
-- If TICKET-002 is not done first, the `isAuthenticated` state will always start as `false` (from SSR), causing the wrong buttons to render initially — hence the dependency
-- Adding `"use client"` to `page.tsx` may affect any Metadata exports — move them to a separate `layout.tsx` or keep them as static exports
+- The build still carries the existing Next.js warning that `middleware.ts` is deprecated in favor of `proxy`, but this ticket does not alter routing behavior.
+- Manual browser QA is still needed to verify the exact perceived hydration timing on a cold load.
 
 ---
 
 ## Open Questions
-None after TICKET-002 is complete.
+None.
+
+---
+
+## Files Changed
+- `frontend/src/app/page.tsx`
+- `frontend/src/components/layout/landing-auth-actions.tsx`
+- `docs/tickets/TICKET-017-landing-page-auth-cta.md`
+- `docs/tickets/README.md`
+
+---
+
+## Validation Performed
+- `frontend`: `npx eslint -- "src/app/page.tsx" "src/components/layout/landing-auth-actions.tsx"`
+- `frontend`: `npm run build`
+
+---
+
+## Follow-up Notes
+- Completed: 2026-03-15.
+- Manual browser QA was not run in this terminal session.

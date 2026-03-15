@@ -5,142 +5,178 @@
 - **Priority:** P3
 - **Type:** testing
 - **Area:** frontend
-- **Status:** open
+- **Status:** done
 - **Dependencies:** none
 
 ---
 
 ## Problem
-The frontend has zero test infrastructure. `frontend/package.json` has no test runner, no `@testing-library/react`, no `vitest` or `jest`. There are no `.test.ts` or `.spec.ts` files anywhere in the frontend codebase.
+The frontend previously had no automated test infrastructure:
+- no test runner
+- no Testing Library
+- no `vitest` config
+- no setup file
+- no frontend `*.test.ts` / `*.test.tsx` files
 
-This means:
-- No automated verification of bug fixes
-- No regression protection when making changes
-- CI/CD pipeline cannot validate frontend correctness
+That left frontend logic and component behavior without any automated regression protection.
 
 ---
 
 ## Why This Matters
-Without tests, every code change requires full manual regression. Critical logic like auth store behavior, subscription status checks, and API token handling has no safety net.
+Frontend tickets were being validated almost entirely by manual QA and build success. Core client behavior such as auth persistence, API token handling, subscription helpers, and puzzle rendering needed an executable test baseline before broader coverage work in `TICKET-024`.
 
 ---
 
 ## Evidence
-- `frontend/package.json` — devDependencies contain only eslint and typescript tooling; no test runner
-- No `*.test.ts` or `*.spec.ts` files found in `frontend/src/`
-- `TESTING_STATUS.md` claims tests exist but actual codebase evidence contradicts this
+- `frontend/package.json` had no `test`, `test:watch`, or `test:coverage` scripts
+- no Vitest or Testing Library packages were installed
+- no frontend test files existed under `frontend/src/`
 
 ---
 
 ## Scope
-
-### 1. Install dependencies
-```bash
-cd frontend
-npm install -D vitest @vitejs/plugin-react @testing-library/react @testing-library/user-event @testing-library/jest-dom jsdom
-```
-
-### 2. Create `vitest.config.ts`
-```typescript
-import { defineConfig } from 'vitest/config';
-import react from '@vitejs/plugin-react';
-import { resolve } from 'path';
-
-export default defineConfig({
-  plugins: [react()],
-  test: {
-    environment: 'jsdom',
-    globals: true,
-    setupFiles: ['./src/test/setup.ts'],
-  },
-  resolve: {
-    alias: {
-      '@': resolve(__dirname, './src'),
-    },
-  },
-});
-```
-
-### 3. Create `src/test/setup.ts`
-```typescript
-import '@testing-library/jest-dom';
-```
-
-### 4. Add test script to `frontend/package.json`
-```json
-{
-  "scripts": {
-    "test": "vitest",
-    "test:ui": "vitest --ui",
-    "test:coverage": "vitest --coverage"
-  }
-}
-```
-
-### 5. Write initial test suite (minimum 4 tests to validate the setup works)
-
-**`src/stores/__tests__/auth.store.test.ts`:**
-- `refreshUser()` calls `/auth/me` when authenticated
-- `logout()` clears user and isAuthenticated
-
-**`src/api/__tests__/client.test.ts`:**
-- Token refresh fires on 401 response
-- `setTokens` stores to localStorage
-
-**`src/hooks/__tests__/use-subscription.test.ts`:**
-- `isPro` returns true for PRO tier with ACTIVE status
-- `isFree` returns true when no subscription
-
-**`src/components/__tests__/PuzzleCard.test.tsx`** (after TICKET-001):
-- Renders encrypted pattern as separate tokens (not char-by-char)
+1. Add frontend test dependencies
+2. Add Vitest configuration with jsdom and `@` alias support
+3. Add a shared test setup file
+4. Add the first four frontend test files
+5. Verify `npm test` works in the frontend workspace
 
 ---
 
 ## Out of Scope
-- E2E tests (Playwright/Cypress) — separate initiative
-- 100% coverage — goal is infrastructure + critical path tests
+- E2E/browser automation
+- large-scale coverage expansion across the app
+- testing server components
 
 ---
 
 ## Implementation Notes
-- Vitest is preferred over Jest for Next.js 15+ projects — better ESM support
-- Mock API calls using `vi.mock()` or `msw` (Mock Service Worker) — for this ticket, `vi.mock()` is sufficient
-- The `@` path alias in vitest config must match `tsconfig.json` paths
-- Next.js App Router components that use hooks like `useRouter` need mocking: `vi.mock('next/navigation', () => ({ useRouter: () => ({ push: vi.fn() }) }))`
+- Added frontend test dependencies:
+  - `vitest`
+  - `@vitest/coverage-v8`
+  - `@testing-library/react`
+  - `@testing-library/jest-dom`
+  - `@testing-library/user-event`
+  - `jsdom`
+  - `@vitejs/plugin-react`
+- Repo/runtime correction:
+  - the latest `vitest@3` and `@vitejs/plugin-react@5` combination pulled in runtime/tooling that did not work cleanly on this machine's Node `20.17.0`
+  - pinned to:
+    - `vitest@2.1.8`
+    - `@vitest/coverage-v8@2.1.8`
+    - `@vitejs/plugin-react@4.3.4`
+    - `jsdom@26.1.0`
+  - this preserves the requested stack while keeping the workspace compatible with the current environment
+- Added `frontend/vitest.config.ts` with:
+  - React plugin
+  - `jsdom` environment
+  - global test APIs
+  - `src/test/setup.ts`
+  - alias support for:
+    - `@`
+    - `@shared`
+- Added `frontend/src/test/setup.ts` importing `@testing-library/jest-dom`.
+- Added `frontend/src/test/vitest.d.ts` so test globals and matcher types are available during `next build` type-checking.
+- Added frontend scripts:
+  - `test`
+  - `test:watch`
+  - `test:coverage`
+- Added the first four test files:
+  - `src/stores/__tests__/auth.store.test.ts`
+  - `src/api/__tests__/client.test.ts`
+  - `src/hooks/__tests__/use-subscription.test.ts`
+  - `src/modules/puzzles/components/__tests__/CipherTokenCell.test.tsx`
+- Scope corrections to match the current codebase:
+  - the real auth-store hydration flag is `hasHydrated`, not `isHydrated`
+  - `useSubscriptionStatus()` is query-backed, so the tests mock `useQuery` instead of `useAuthStore`
+  - the requested component target in the implementation prompt was `CipherTokenCell`, so the component test was added there instead of the older ticket draft's `PuzzleCard`
+- Test coverage added by file:
+  - `auth.store.test.ts`
+    - initial state contract
+    - `login()`
+    - `logout()`
+    - `refreshUser()` with and without stored session
+  - `client.test.ts`
+    - token storage mode
+    - auth header injection
+    - no-auth-header path
+    - `401` refresh-and-retry flow
+  - `use-subscription.test.ts`
+    - PRO and PREMIUM tiers return `isPro=true`
+    - FREE and `null` return `isPro=false`
+  - `CipherTokenCell.test.tsx`
+    - numeric token render
+    - punctuation/edge token render
+    - empty spacer render
+    - hidden placeholder render
 
 ---
 
 ## Acceptance Criteria
-- [ ] `npm test` runs in `frontend/` without errors
-- [ ] `vitest.config.ts` is correctly configured with jsdom environment and `@` alias
-- [ ] Minimum 4 test files created and passing
-- [ ] Auth store tests pass: login, logout, refreshUser behaviors
-- [ ] API client tests pass: token storage, 401 retry
-- [ ] Subscription hook tests pass: tier checks
-- [ ] CI can run `npm test` in the frontend workspace
+- [x] `npm test` runs in `frontend/` without errors
+- [x] `vitest.config.ts` is correctly configured with jsdom environment and `@` alias
+- [x] Minimum 4 test files created and passing
+- [x] Auth store tests pass: login, logout, refreshUser behaviors
+- [x] API client tests pass: token storage, 401 retry
+- [x] Subscription hook tests pass: tier checks
+- [x] CI can run `npm test` in the frontend workspace
 
 ---
 
 ## Testing Requirements
-- This ticket IS the testing infrastructure — validate by running `npm test` and verifying all written tests pass
+- This ticket is the test infrastructure baseline. Validation is the written suite itself plus a successful frontend build.
 
 ---
 
 ## Affected Areas
 - `frontend/package.json`
-- New: `frontend/vitest.config.ts`
-- New: `frontend/src/test/setup.ts`
-- New: `frontend/src/stores/__tests__/auth.store.test.ts`
-- New: `frontend/src/api/__tests__/client.test.ts`
-- New: `frontend/src/hooks/__tests__/use-subscription.test.ts`
+- `package-lock.json`
+- `frontend/vitest.config.ts`
+- `frontend/src/test/setup.ts`
+- `frontend/src/test/vitest.d.ts`
+- `frontend/src/stores/__tests__/auth.store.test.ts`
+- `frontend/src/api/__tests__/client.test.ts`
+- `frontend/src/hooks/__tests__/use-subscription.test.ts`
+- `frontend/src/modules/puzzles/components/__tests__/CipherTokenCell.test.tsx`
 
 ---
 
 ## Risks / Edge Cases
-- Next.js server components cannot be tested with JSDOM — only test client components and utility functions
-- Some Zustand store tests may need `act()` wrapping for async state updates
+- Next.js server components still are not directly testable in this setup; the suite is intentionally limited to client-side logic/components.
+- The Vite Node API currently emits a deprecation warning about the CJS build during `vitest run`; tests still pass.
+- Full frontend lint is still blocked by unrelated pre-existing errors elsewhere in the repo.
 
 ---
 
 ## Open Questions
 None.
+
+---
+
+## Files Changed
+- `frontend/package.json`
+- `package-lock.json`
+- `frontend/vitest.config.ts`
+- `frontend/src/test/setup.ts`
+- `frontend/src/test/vitest.d.ts`
+- `frontend/src/stores/__tests__/auth.store.test.ts`
+- `frontend/src/api/__tests__/client.test.ts`
+- `frontend/src/hooks/__tests__/use-subscription.test.ts`
+- `frontend/src/modules/puzzles/components/__tests__/CipherTokenCell.test.tsx`
+- `docs/tickets/TICKET-023-frontend-test-infrastructure.md`
+- `docs/tickets/README.md`
+
+---
+
+## Validation Performed
+- `frontend`: `npm run test`
+- `frontend`: `npm run build`
+- `frontend`: `npx eslint -- "vitest.config.ts" "src/test/setup.ts" "src/test/vitest.d.ts" "src/stores/__tests__/auth.store.test.ts" "src/api/__tests__/client.test.ts" "src/hooks/__tests__/use-subscription.test.ts" "src/modules/puzzles/components/__tests__/CipherTokenCell.test.tsx"`
+- `frontend`: attempted `npm run lint`
+  - result: failed on unrelated pre-existing errors in `achievements/page.tsx`, `pricing/page.tsx`, `particle-effects.tsx`, `theme-provider.tsx`, and `tailwind.config.ts`
+
+---
+
+## Follow-up Notes
+- Completed: 2026-03-15.
+- No application code behavior was changed outside the test/tooling setup.

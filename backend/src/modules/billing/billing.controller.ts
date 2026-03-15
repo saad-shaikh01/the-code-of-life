@@ -16,7 +16,7 @@ import { CreateCheckoutSessionDto } from './dto/create-checkout-session.dto';
 import { CreatePortalSessionDto } from './dto/create-portal-session.dto';
 
 interface AuthenticatedRequest extends Request {
-  user: { userId: string };
+  user: { id: string; userId?: string };
 }
 
 @ApiTags('billing')
@@ -33,7 +33,7 @@ export class BillingController {
     @Body() dto: CreateCheckoutSessionDto,
   ) {
     return this.billingService.createCheckoutSession(
-      req.user.userId,
+      req.user.id,
       dto.priceId,
       dto.successUrl,
       dto.cancelUrl,
@@ -49,7 +49,7 @@ export class BillingController {
     @Body() dto: CreatePortalSessionDto,
   ) {
     return this.billingService.createPortalSession(
-      req.user.userId,
+      req.user.id,
       dto.returnUrl,
     );
   }
@@ -59,7 +59,7 @@ export class BillingController {
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Get current user subscription' })
   async getSubscription(@Req() req: AuthenticatedRequest) {
-    return this.billingService.getSubscription(req.user.userId);
+    return this.billingService.getSubscription(req.user.id);
   }
 
   @Post('webhook')

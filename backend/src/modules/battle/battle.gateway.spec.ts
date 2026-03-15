@@ -2,15 +2,32 @@ import { Test, TestingModule } from '@nestjs/testing';
 import { BattleGateway } from './battle.gateway';
 import { BattleService } from './battle.service';
 import { WsJwtGuard } from './ws-jwt.guard';
-import { Socket } from 'socket.io';
+import { Server, Socket } from 'socket.io';
 
 interface AuthenticatedSocket extends Socket {
   user?: { userId: string; username: string };
 }
 
+interface MockSocket extends AuthenticatedSocket {
+  join: jest.Mock;
+  leave: jest.Mock;
+  to: jest.Mock;
+  emit: jest.Mock;
+}
+
+interface MockServer {
+  to: jest.Mock;
+  emit: jest.Mock;
+}
+
+interface InvalidPayloadMessage {
+  message: string;
+  errors: unknown[];
+}
+
 describe('BattleGateway', () => {
   let gateway: BattleGateway;
-  let battleService: BattleService;
+  let mockServer: MockServer;
 
   const mockBattleService = {
     joinLobby: jest.fn(),
@@ -22,16 +39,59 @@ describe('BattleGateway', () => {
     handlePlayerDisconnect: jest.fn(),
   };
 
-  const createMockSocket = (userId: string, username: string): AuthenticatedSocket => {
-    const socket: Partial<AuthenticatedSocket> = {
+  const createMockSocket = (userId: string, username: string): MockSocket => {
+    const socket = {
       id: `socket_${Math.random()}`,
       user: { userId, username },
       join: jest.fn(),
-      leave: jest.fn(),
-      to: jest.fn().mockReturnThis(),
+      leave: jest.fn<Promise<void>, [string]>(),
+      to: jest.fn(),
+      emit: jest.fn(),
+    } as unknown as MockSocket;
+
+    socket.to.mockReturnValue(socket);
+
+    return socket;
+  };
+
+  const createMockServer = (): MockServer => {
+    const server = {
+      to: jest.fn(),
       emit: jest.fn(),
     };
-    return socket as AuthenticatedSocket;
+
+    server.to.mockReturnValue(server);
+
+    return server;
+  };
+
+  const getEmittedPayload = (
+    socket: MockSocket,
+    eventName: string,
+  ): unknown => {
+    const calls = socket.emit.mock.calls as unknown[][];
+    const matchingCall = calls.find(([emittedEvent]) => {
+      return emittedEvent === eventName;
+    });
+
+    return matchingCall?.[1];
+  };
+
+  const isInvalidPayloadMessage = (
+    payload: unknown,
+  ): payload is InvalidPayloadMessage => {
+    if (!payload || typeof payload !== 'object') {
+      return false;
+    }
+
+    const candidate = payload as {
+      message?: unknown;
+      errors?: unknown;
+    };
+
+    return (
+      candidate.message === 'Invalid payload' && Array.isArray(candidate.errors)
+    );
   };
 
   beforeEach(async () => {
@@ -49,13 +109,10 @@ describe('BattleGateway', () => {
       .compile();
 
     gateway = module.get<BattleGateway>(BattleGateway);
-    battleService = module.get<BattleService>(BattleService);
 
     // Mock the WebSocket server
-    gateway.server = {
-      to: jest.fn().mockReturnThis(),
-      emit: jest.fn(),
-    } as any;
+    mockServer = createMockServer();
+    gateway.server = mockServer as unknown as Server;
 
     // Clear all mocks before each test
     jest.clearAllMocks();
@@ -66,10 +123,10 @@ describe('BattleGateway', () => {
   });
 
   describe('Connection Lifecycle', () => {
-    it('should handle connection', async () => {
+    it('should handle connection', () => {
       const socket = createMockSocket('user-1', 'TestUser');
 
-      await gateway.handleConnection(socket);
+      gateway.handleConnection(socket);
 
       expect(socket.id).toBeDefined();
     });
@@ -86,7 +143,6 @@ describe('BattleGateway', () => {
 
     it('should cleanup on disconnect', async () => {
       const socket = createMockSocket('user-1', 'TestUser');
-      const lobbyId = 'lobby-123';
 
       mockBattleService.handlePlayerDisconnect.mockResolvedValue(undefined);
 
@@ -122,8 +178,7 @@ describe('BattleGateway', () => {
 
       const result = await gateway.handleJoinLobby(socket, {});
 
-      expect(result.event).toBe('lobby_joined');
-      expect(result.data).toEqual(lobbyData);
+      expect(result).toEqual({ event: 'lobby_joined', data: lobbyData });
       expect(socket.join).toHaveBeenCalledWith(`lobby:${lobbyData.id}`);
     });
 
@@ -131,10 +186,34 @@ describe('BattleGateway', () => {
       const socket = createMockSocket('user-1', 'TestUser');
       socket.user = undefined;
 
-      const result: any = await gateway.handleJoinLobby(socket, {});
+      const result = await gateway.handleJoinLobby(socket, {});
 
-      expect(result.event).toBe('battle_error');
-      expect(result.data.code).toBe('AUTH_REQUIRED');
+      expect(result).toEqual({
+        event: 'battle_error',
+        data: { code: 'AUTH_REQUIRED', message: 'Authentication required' },
+      });
+    });
+
+    it('emits payload validation errors for invalid join_lobby messages', async () => {
+      const socket = createMockSocket('user-1', 'TestUser');
+
+      const result = await gateway.handleJoinLobby(socket, {
+        lobbyId: 12345,
+        puzzleDifficulty: 'IMPOSSIBLE',
+      });
+
+      expect(result).toBeUndefined();
+      const errorPayload = getEmittedPayload(socket, 'error');
+      expect(isInvalidPayloadMessage(errorPayload)).toBe(true);
+      if (!isInvalidPayloadMessage(errorPayload)) {
+        throw new Error('Expected invalid payload error event');
+      }
+      expect(errorPayload.errors).toEqual(expect.any(Array));
+      expect(socket.emit).toHaveBeenCalledWith('battle_error', {
+        code: 'INVALID_PAYLOAD',
+        message: 'Invalid payload',
+      });
+      expect(mockBattleService.joinLobby).not.toHaveBeenCalled();
     });
 
     it('should leave lobby successfully', async () => {
@@ -143,9 +222,12 @@ describe('BattleGateway', () => {
 
       mockBattleService.leaveLobby.mockResolvedValue(undefined);
 
-      const result: any = await gateway.handleLeaveLobby(socket, { lobbyId });
+      const result = await gateway.handleLeaveLobby(socket, { lobbyId });
 
-      expect(result.event).toBe('left_lobby');
+      expect(result).toEqual({
+        event: 'left_lobby',
+        data: { success: true },
+      });
       expect(socket.leave).toHaveBeenCalledWith(`lobby:${lobbyId}`);
       expect(mockBattleService.leaveLobby).toHaveBeenCalledWith(
         lobbyId,
@@ -187,24 +269,45 @@ describe('BattleGateway', () => {
 
       await gateway.handleLeaveLobby(socket, { lobbyId });
 
-      expect(gateway.server.to).toHaveBeenCalledWith(`lobby:${lobbyId}`);
-      expect(gateway.server.emit).toHaveBeenCalled();
+      expect(mockServer.to).toHaveBeenCalledWith(`lobby:${lobbyId}`);
+      expect(mockServer.emit).toHaveBeenCalled();
     });
   });
 
   describe('Game Flow', () => {
+    it('emits payload validation errors for invalid player_ready messages', async () => {
+      const socket = createMockSocket('user-1', 'TestUser');
+
+      const result = await gateway.handlePlayerReady(socket, {
+        lobbyId: 'lobby-123',
+        isReady: 'yes',
+      });
+
+      expect(result).toBeUndefined();
+      const errorPayload = getEmittedPayload(socket, 'error');
+      expect(isInvalidPayloadMessage(errorPayload)).toBe(true);
+      if (!isInvalidPayloadMessage(errorPayload)) {
+        throw new Error('Expected invalid payload error event');
+      }
+      expect(errorPayload.errors).toEqual(expect.any(Array));
+      expect(mockBattleService.setPlayerReady).not.toHaveBeenCalled();
+    });
+
     it('should handle ready state changes', async () => {
       const socket = createMockSocket('user-1', 'TestUser');
       const lobbyId = 'lobby-123';
 
       mockBattleService.setPlayerReady.mockResolvedValue({ allReady: false });
 
-      const result: any = await gateway.handlePlayerReady(socket, {
+      const result = await gateway.handlePlayerReady(socket, {
         lobbyId,
         isReady: true,
       });
 
-      expect(result.event).toBe('ready_updated');
+      expect(result).toEqual({
+        event: 'ready_updated',
+        data: { success: true },
+      });
       expect(mockBattleService.setPlayerReady).toHaveBeenCalledWith(
         lobbyId,
         'user-1',
@@ -229,11 +332,8 @@ describe('BattleGateway', () => {
       await gateway.handlePlayerReady(socket, { lobbyId, isReady: true });
 
       expect(mockBattleService.startMatch).toHaveBeenCalledWith(lobbyId);
-      expect(gateway.server.to).toHaveBeenCalledWith(`lobby:${lobbyId}`);
-      expect(gateway.server.emit).toHaveBeenCalledWith(
-        'match_start',
-        matchData,
-      );
+      expect(mockServer.to).toHaveBeenCalledWith(`lobby:${lobbyId}`);
+      expect(mockServer.emit).toHaveBeenCalledWith('match_start', matchData);
     });
 
     it('should update progress', async () => {
@@ -257,6 +357,27 @@ describe('BattleGateway', () => {
         progressData,
       );
       expect(socket.to).toHaveBeenCalledWith(`lobby:${lobbyId}`);
+    });
+
+    it('emits payload validation errors for out-of-range progress updates', async () => {
+      const socket = createMockSocket('user-1', 'TestUser');
+
+      const result = await gateway.handleProgressUpdate(socket, {
+        lobbyId: 'lobby-123',
+        progress: 150,
+        correctCharacters: 10,
+        totalCharacters: 20,
+        hintsUsed: 1,
+      });
+
+      expect(result).toBeUndefined();
+      expect(socket.emit).toHaveBeenCalledWith(
+        'battle_error',
+        expect.objectContaining({
+          code: 'INVALID_PAYLOAD',
+        }),
+      );
+      expect(mockBattleService.updateProgress).not.toHaveBeenCalled();
     });
 
     it('should submit solution and end game', async () => {
@@ -286,17 +407,37 @@ describe('BattleGateway', () => {
 
       mockBattleService.submitSolution.mockResolvedValue(submitResult);
 
-      const result: any = await gateway.handleSubmitSolution(socket, solutionData);
+      const result = await gateway.handleSubmitSolution(socket, solutionData);
 
-      expect(result.event).toBe('solution_submitted');
-      expect(result.data.isCorrect).toBe(true);
-      expect(gateway.server.to).toHaveBeenCalledWith(`lobby:${lobbyId}`);
-      expect(gateway.server.emit).toHaveBeenCalledWith('game_over', {
+      expect(result).toEqual({
+        event: 'solution_submitted',
+        data: { isCorrect: true },
+      });
+      expect(mockServer.to).toHaveBeenCalledWith(`lobby:${lobbyId}`);
+      expect(mockServer.emit).toHaveBeenCalledWith('game_over', {
         lobbyId,
         winnerId: submitResult.winnerId,
         winnerUsername: submitResult.winnerUsername,
         results: submitResult.results,
       });
+    });
+
+    it('emits payload validation errors when submit_solution is missing the solution', async () => {
+      const socket = createMockSocket('user-1', 'TestUser');
+
+      const result = await gateway.handleSubmitSolution(socket, {
+        lobbyId: 'lobby-123',
+        timeElapsed: 120,
+      });
+
+      expect(result).toBeUndefined();
+      expect(socket.emit).toHaveBeenCalledWith(
+        'battle_error',
+        expect.objectContaining({
+          code: 'INVALID_PAYLOAD',
+        }),
+      );
+      expect(mockBattleService.submitSolution).not.toHaveBeenCalled();
     });
 
     it('should handle incorrect solution without ending game', async () => {
@@ -314,11 +455,16 @@ describe('BattleGateway', () => {
 
       mockBattleService.submitSolution.mockResolvedValue(submitResult);
 
-      const result: any = await gateway.handleSubmitSolution(socket, solutionData);
+      const result = await gateway.handleSubmitSolution(socket, solutionData);
 
-      expect(result.event).toBe('solution_submitted');
-      expect(result.data.isCorrect).toBe(false);
-      expect(gateway.server.emit).not.toHaveBeenCalledWith('game_over', expect.any(Object));
+      expect(result).toEqual({
+        event: 'solution_submitted',
+        data: { isCorrect: false },
+      });
+      expect(mockServer.emit).not.toHaveBeenCalledWith(
+        'game_over',
+        expect.any(Object),
+      );
     });
   });
 
@@ -328,10 +474,12 @@ describe('BattleGateway', () => {
 
       mockBattleService.joinLobby.mockRejectedValue(new Error('Join failed'));
 
-      const result: any = await gateway.handleJoinLobby(socket, {});
+      const result = await gateway.handleJoinLobby(socket, {});
 
-      expect(result.event).toBe('battle_error');
-      expect(result.data.code).toBe('JOIN_FAILED');
+      expect(result).toEqual({
+        event: 'battle_error',
+        data: { code: 'JOIN_FAILED', message: 'Failed to join lobby' },
+      });
     });
 
     it('should handle leave lobby errors', async () => {
@@ -340,10 +488,12 @@ describe('BattleGateway', () => {
 
       mockBattleService.leaveLobby.mockRejectedValue(new Error('Leave failed'));
 
-      const result: any = await gateway.handleLeaveLobby(socket, { lobbyId });
+      const result = await gateway.handleLeaveLobby(socket, { lobbyId });
 
-      expect(result.event).toBe('battle_error');
-      expect(result.data.code).toBe('LEAVE_FAILED');
+      expect(result).toEqual({
+        event: 'battle_error',
+        data: { code: 'LEAVE_FAILED', message: 'Failed to leave lobby' },
+      });
     });
 
     it('should handle player ready errors', async () => {
@@ -354,13 +504,18 @@ describe('BattleGateway', () => {
         new Error('Ready failed'),
       );
 
-      const result: any = await gateway.handlePlayerReady(socket, {
+      const result = await gateway.handlePlayerReady(socket, {
         lobbyId,
         isReady: true,
       });
 
-      expect(result.event).toBe('battle_error');
-      expect(result.data.code).toBe('READY_FAILED');
+      expect(result).toEqual({
+        event: 'battle_error',
+        data: {
+          code: 'READY_FAILED',
+          message: 'Failed to update ready state',
+        },
+      });
     });
 
     it('should handle submit solution errors', async () => {
@@ -375,10 +530,12 @@ describe('BattleGateway', () => {
         new Error('Submit failed'),
       );
 
-      const result: any = await gateway.handleSubmitSolution(socket, solutionData);
+      const result = await gateway.handleSubmitSolution(socket, solutionData);
 
-      expect(result.event).toBe('battle_error');
-      expect(result.data.code).toBe('SUBMIT_FAILED');
+      expect(result).toEqual({
+        event: 'battle_error',
+        data: { code: 'SUBMIT_FAILED', message: 'Failed to submit solution' },
+      });
     });
   });
 });

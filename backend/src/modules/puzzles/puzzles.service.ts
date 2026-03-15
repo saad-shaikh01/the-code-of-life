@@ -115,11 +115,16 @@ export class PuzzlesService {
   ): Promise<Puzzle> {
     await this.findOne(id);
 
+    const scheduledDate =
+      updatePuzzleInput.scheduledDate === undefined
+        ? undefined
+        : updatePuzzleInput.scheduledDate === null
+          ? null
+          : new Date(updatePuzzleInput.scheduledDate);
+
     const data: Prisma.PuzzleUpdateInput = {
       ...updatePuzzleInput,
-      scheduledDate: updatePuzzleInput.scheduledDate
-        ? new Date(updatePuzzleInput.scheduledDate)
-        : undefined,
+      scheduledDate,
     };
 
     return this.prisma.puzzle.update({

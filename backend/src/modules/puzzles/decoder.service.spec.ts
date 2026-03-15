@@ -22,9 +22,7 @@ describe('DecoderService', () => {
     const original = `A B Z,?;:'".!&-*...`;
     const encoded = service.encode(original);
 
-    expect(encoded.output).toBe(
-      '1  2  26 27 28 29 30 31 32 33 34 35 36 0 37',
-    );
+    expect(encoded.output).toBe('1  2  26 27 28 29 30 31 32 33 34 35 36 0 37');
 
     const decoded = service.decode(encoded.output);
 
@@ -63,5 +61,23 @@ describe('DecoderService', () => {
 
     expect(service.validateAttempt(attempt, reflection)).toBe(true);
     expect(service.calculateSimilarity(attempt, reflection)).toBe(1);
+  });
+
+  it('honors case sensitivity when validating attempts', () => {
+    expect(service.validateAttempt('HELLO', 'hello')).toBe(true);
+    expect(service.validateAttempt('HELLO', 'hello', true)).toBe(false);
+  });
+
+  it('returns a partial similarity score for near matches and zero for empty attempts', () => {
+    expect(service.calculateSimilarity('HELMO', 'HELLO')).toBeCloseTo(0.8, 5);
+    expect(service.calculateSimilarity('', 'HELLO')).toBe(0);
+  });
+
+  it('returns a defensive copy of the default symbol map', () => {
+    const symbolMap = service.getDefaultSymbolMap();
+
+    symbolMap['1'] = 'Z';
+
+    expect(service.getDefaultSymbolMap()['1']).toBe('A');
   });
 });

@@ -14,6 +14,7 @@ import type {
   ChangePasswordInput,
   ForgotPasswordInput,
   ForgotPasswordResponse,
+  MessageResponse,
   ResetPasswordInput,
   User,
 } from "@/types/api.types";
@@ -54,6 +55,20 @@ export const authService = {
    */
   resetPassword: (data: ResetPasswordInput) =>
     apiClient.post<null>("/auth/reset-password", data),
+
+  /**
+   * Verify email using a token from the email link
+   */
+  verifyEmail: (token: string) =>
+    apiClient.get<MessageResponse>(
+      `/auth/verify-email?token=${encodeURIComponent(token)}`,
+    ),
+
+  /**
+   * Resend the current user's verification email
+   */
+  resendVerification: () =>
+    apiClient.post<MessageResponse>("/auth/resend-verification", undefined, true),
 
   /**
    * Get current authenticated user

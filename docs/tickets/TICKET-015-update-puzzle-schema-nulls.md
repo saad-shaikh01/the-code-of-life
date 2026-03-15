@@ -5,147 +5,137 @@
 - **Priority:** P2
 - **Type:** bug
 - **Area:** shared
-- **Status:** open
+- **Status:** done
 - **Dependencies:** none
 
 ---
 
 ## Problem
-`updatePuzzleSchema` in `packages/shared/src/schemas/puzzle.schema.ts` is defined as `createPuzzleSchema.partial()`. This makes all fields optional but does NOT allow `null` values for nullable fields.
+`updatePuzzleSchema` in `packages/shared/src/schemas/puzzle.schema.ts` was defined as `createPuzzleSchema.partial()`. That made every field optional, but it did not allow explicit `null` values for nullable Prisma fields.
 
-When a `null` value is passed to update a puzzle (e.g., to clear `bookChapter` back to null), the `ZodValidationPipe` in NestJS converts it to `undefined`. Since `undefined` means "not provided" in a PATCH request, the field is never cleared — the existing value stays in the database.
-
-This means fields like `bookChapter`, `bookSection`, `bookPageRef`, `scheduledDate`, and `hints` cannot be cleared once set.
+As a result, PATCH requests could omit fields, but they could not intentionally clear nullable values such as `bookChapter`, `bookSection`, `bookPageRef`, or `scheduledDate`.
 
 ---
 
 ## Why This Matters
-Content management: if a puzzle's `bookChapter` was set incorrectly and needs to be cleared, there is no way to do it via the API. This affects any admin tool or script that manages puzzle content.
+Puzzle content management needs true PATCH semantics:
+- field omitted: leave existing value unchanged
+- field provided with a value: update it
+- field provided as `null`: clear it when the Prisma field is nullable
+
+Without that distinction, admins cannot remove incorrect book metadata or scheduled dates once they have been set.
 
 ---
 
 ## Evidence
-- `packages/shared/src/schemas/puzzle.schema.ts` — `updatePuzzleSchema = createPuzzleSchema.partial()`
-- `backend_issues.md` — documents this issue with the exact fix
-- Prisma `Puzzle` model: `bookChapter Int?`, `bookSection String?`, `bookPageRef String?`, `scheduledDate DateTime?`, `hints String[]` (nullable array)
+- `packages/shared/src/schemas/puzzle.schema.ts` previously exported `updatePuzzleSchema = createPuzzleSchema.partial()`
+- `backend_issues.md` documented the shared-schema side of the bug
+- `backend/src/modules/puzzles/puzzles.service.ts` also needed one correction: `scheduledDate: null` was being rewritten to `undefined`, so the clear operation was lost before reaching Prisma
+- Prisma `Puzzle` model nullable fields are:
+  - `bookChapter Int?`
+  - `bookSection String?`
+  - `bookPageRef String?`
+  - `scheduledDate DateTime?`
 
 ---
 
 ## Scope
-Replace `updatePuzzleSchema` with an explicit definition that includes `.nullable().optional()` on nullable fields.
-
-The exact fix (from `backend_issues.md`) — replace the current `updatePuzzleSchema` export with:
-
-```typescript
-export const updatePuzzleSchema = z.object({
-  title: z
-    .string()
-    .min(1, 'Title is required')
-    .max(200, 'Title must be less than 200 characters')
-    .optional(),
-
-  encryptedPattern: z
-    .string()
-    .min(1, 'Encrypted pattern is required')
-    .describe('The encrypted pattern using symbols, numbers, and punctuation')
-    .optional(),
-
-  originalReflection: z
-    .string()
-    .min(1, 'Original reflection is required')
-    .describe('The decoded life lesson from the book')
-    .optional(),
-
-  gameMode: gameModeSchema.describe('Game mode for the puzzle').optional(),
-
-  difficulty: difficultySchema.describe('Difficulty level of the puzzle').optional(),
-
-  bookChapter: z
-    .number()
-    .int()
-    .min(1, 'Book chapter must be at least 1')
-    .nullable()
-    .optional()
-    .describe('Chapter number from the book'),
-
-  bookSection: z
-    .string()
-    .max(100)
-    .nullable()
-    .optional()
-    .describe('Section name within the chapter'),
-
-  bookPageRef: z
-    .string()
-    .max(50)
-    .nullable()
-    .optional()
-    .describe('Page reference in the book'),
-
-  orderIndex: z
-    .number()
-    .int()
-    .min(0)
-    .describe('Order index for puzzle sequencing')
-    .optional(),
-
-  scheduledDate: z
-    .string()
-    .datetime({ offset: true })
-    .or(z.string().date())
-    .nullable()
-    .optional()
-    .describe('Scheduled date for DAILY mode puzzles'),
-
-  hints: z
-    .array(z.string().min(1))
-    .nullable()
-    .optional()
-    .describe('Array of hints to help players'),
-});
-```
+1. Replace the derived update schema with an explicit schema
+2. Mark only the truly nullable Prisma fields as `.nullable().optional()`
+3. Preserve non-nullable fields as optional but not nullable
+4. Ensure `scheduledDate: null` survives the service layer and reaches Prisma as `null`
 
 ---
 
 ## Out of Scope
 - Changes to `createPuzzleSchema`
-- Backend controller or service changes (schema validation is shared)
-- Frontend puzzle editing UI
+- Prisma schema changes
+- Frontend admin editing UI
 
 ---
 
 ## Implementation Notes
-- This is a one-file change in `packages/shared/`
-- After the change, run `npm run build` in the `packages/shared` workspace to verify no TypeScript errors
-- The backend `PuzzlesService.updatePuzzle()` should already handle `null` values correctly via Prisma (Prisma treats `null` as "set to null" in an update) — verify this is the case, no backend changes should be needed
+- Replaced `createPuzzleSchema.partial()` with an explicit `updatePuzzleSchema`.
+- Applied `.nullable().optional()` only to Prisma-nullable fields:
+  - `bookChapter`
+  - `bookSection`
+  - `bookPageRef`
+  - `scheduledDate`
+- Kept required-on-create fields optional but non-nullable on update:
+  - `title`
+  - `encryptedPattern`
+  - `originalReflection`
+  - `gameMode`
+  - `difficulty`
+  - `orderIndex`
+- Correction to the original ticket text:
+  - `hints` is `String[] @default([])` in the current Prisma schema, not a nullable array
+  - because of that, `hints` correctly remains optional but not nullable in `updatePuzzleSchema`
+  - clearing hints continues to use an empty array `[]`, not `null`
+- Minimal backend fix applied in `PuzzlesService.update()`:
+  - `scheduledDate === null` now passes through as `null`
+  - string dates are still converted to `Date`
+  - `undefined` still means "no change"
 
 ---
 
 ## Acceptance Criteria
-- [ ] `PATCH /api/puzzles/:id` with `{ "bookChapter": null }` successfully sets `bookChapter` to null in the database
-- [ ] `PATCH /api/puzzles/:id` with `{ "scheduledDate": null }` clears the scheduled date
-- [ ] `PATCH /api/puzzles/:id` with `{ "hints": null }` clears the hints array
-- [ ] Required fields (title, encryptedPattern, originalReflection) still cannot be set to null
-- [ ] `npm run build` passes in `packages/shared`
+- [x] `PATCH /api/puzzles/:id` with `{ "bookChapter": null }` can clear `bookChapter`
+- [x] `PATCH /api/puzzles/:id` with `{ "scheduledDate": null }` can clear `scheduledDate`
+- [x] `PATCH /api/puzzles/:id` with `{ "bookSection": null }` can clear `bookSection`
+- [x] `PATCH /api/puzzles/:id` with `{ "bookPageRef": null }` can clear `bookPageRef`
+- [x] Required fields (`title`, `encryptedPattern`, `originalReflection`) still reject `null`
+- [x] `hints` remains non-nullable because the Prisma field is not nullable
+- [x] `npm run build` passes in `packages/shared`
 
 ---
 
 ## Testing Requirements
-- **Integration test:** `PATCH /api/puzzles/:id` with each nullable field set to `null` — verify DB stores null
-- **Unit test (optional):** Parse `updatePuzzleSchema` with `{ bookChapter: null }` — verify it passes validation
+- **Automated coverage added:**
+  1. `updatePuzzleSchema` accepts `null` for nullable fields and rejects `null` for non-nullable fields
+  2. `PuzzlesService.update()` passes nullable fields through to Prisma and preserves `scheduledDate: null`
+  3. `PuzzlesService.update()` still converts string `scheduledDate` values to `Date`
 
 ---
 
 ## Affected Areas
 - `packages/shared/src/schemas/puzzle.schema.ts`
+- `backend/src/modules/puzzles/puzzles.service.ts`
+- `backend/src/modules/puzzles/puzzles.service.spec.ts`
+- `backend/src/modules/puzzles/schemas/puzzle.schema.spec.ts`
 
 ---
 
 ## Risks / Edge Cases
-- If any existing code passes `null` for non-nullable fields, this schema change will correctly reject it — that's the desired behavior
-- The `.nullable().optional()` combination means the field can be: missing (undefined, no change), present as a value, or explicitly `null` (clear it) — this is the correct semantic for a PATCH endpoint
+- Existing callers that incorrectly send `null` for non-nullable fields now fail validation, which is the intended behavior.
+- `hints` cannot be cleared with `null` unless the Prisma model itself changes in a future ticket.
 
 ---
 
 ## Open Questions
-None — the fix is fully specified in `backend_issues.md`.
+None.
+
+---
+
+## Files Changed
+- `packages/shared/src/schemas/puzzle.schema.ts`
+- `backend/src/modules/puzzles/puzzles.service.ts`
+- `backend/src/modules/puzzles/puzzles.service.spec.ts`
+- `backend/src/modules/puzzles/schemas/puzzle.schema.spec.ts`
+- `docs/tickets/TICKET-015-update-puzzle-schema-nulls.md`
+- `docs/tickets/README.md`
+
+---
+
+## Validation Performed
+- `packages/shared`: `npm run build`
+- `repo root`: `npx eslint -c backend/eslint.config.mjs "packages/shared/src/schemas/puzzle.schema.ts"`
+- `backend`: `npx eslint -- "src/modules/puzzles/puzzles.service.ts" "src/modules/puzzles/puzzles.service.spec.ts" "src/modules/puzzles/schemas/puzzle.schema.spec.ts"`
+- `backend`: `npm run test`
+- `backend`: `npm run build`
+
+---
+
+## Follow-up Notes
+- Completed: 2026-03-15.
+- `backend` tests pass, but the existing battle gateway specs still emit their long-standing mocked error logs and Jest worker shutdown warning unrelated to this ticket.

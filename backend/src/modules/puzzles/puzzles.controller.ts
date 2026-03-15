@@ -19,29 +19,30 @@ import {
   ApiParam,
   ApiBearerAuth,
 } from '@nestjs/swagger';
-import { SubscriptionTier } from '@prisma/client';
-import { JwtAuthGuard, SubscriptionGuard, RequireSubscription } from '../../common/guards';
+import { Role, SubscriptionTier } from '@prisma/client';
+import {
+  JwtAuthGuard,
+  RolesGuard,
+  SubscriptionGuard,
+  RequireSubscription,
+} from '../../common/guards';
+import { Roles } from '../../common/decorators';
 import { ZodValidationPipe } from 'nestjs-zod';
 import { PuzzlesService } from './puzzles.service';
 import { DecoderService } from './decoder.service';
 import {
   CreatePuzzleDto,
   UpdatePuzzleDto,
-  createPuzzleSchema,
-  updatePuzzleSchema,
   CreatePuzzleInput,
   UpdatePuzzleInput,
 } from './schemas/puzzle.schema';
-import { PuzzleQueryDto, puzzleQuerySchema } from './schemas/puzzle-query.schema';
+import { PuzzleQueryDto } from './schemas/puzzle-query.schema';
 import {
   DecodeRequestDto,
   EncodeRequestDto,
   ValidateAttemptDto,
   DecodeResultDto,
   ValidationResultDto,
-  decodeRequestSchema,
-  encodeRequestSchema,
-  validateAttemptSchema,
   DecodeResult,
   ValidationResult,
 } from './schemas/decoder.schema';
@@ -58,6 +59,8 @@ export class PuzzlesController {
   ) {}
 
   @Post()
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(Role.ADMIN)
   @HttpCode(HttpStatus.CREATED)
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Create a new puzzle' })
@@ -65,6 +68,8 @@ export class PuzzlesController {
     status: 201,
     description: 'Puzzle created successfully',
   })
+  @ApiResponse({ status: 401, description: 'Unauthorized' })
+  @ApiResponse({ status: 403, description: 'Admin access required' })
   @ApiResponse({ status: 400, description: 'Invalid input data' })
   async create(
     @Body() createPuzzleDto: CreatePuzzleDto,
@@ -97,7 +102,9 @@ export class PuzzlesController {
   @UseGuards(JwtAuthGuard, SubscriptionGuard)
   @RequireSubscription(SubscriptionTier.PRO)
   @ApiBearerAuth()
-  @ApiOperation({ summary: "Get today's daily puzzle (PRO subscription required)" })
+  @ApiOperation({
+    summary: "Get today's daily puzzle (PRO subscription required)",
+  })
   @ApiResponse({
     status: 200,
     description: "Returns today's daily puzzle or null if not available",
@@ -122,10 +129,14 @@ export class PuzzlesController {
   }
 
   @Patch(':id')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(Role.ADMIN)
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Update a puzzle' })
   @ApiParam({ name: 'id', description: 'Puzzle ID' })
   @ApiResponse({ status: 200, description: 'Puzzle updated successfully' })
+  @ApiResponse({ status: 401, description: 'Unauthorized' })
+  @ApiResponse({ status: 403, description: 'Admin access required' })
   @ApiResponse({ status: 404, description: 'Puzzle not found' })
   async update(
     @Param('id') id: string,
@@ -139,11 +150,15 @@ export class PuzzlesController {
   }
 
   @Delete(':id')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(Role.ADMIN)
   @HttpCode(HttpStatus.OK)
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Delete a puzzle' })
   @ApiParam({ name: 'id', description: 'Puzzle ID' })
   @ApiResponse({ status: 200, description: 'Puzzle deleted successfully' })
+  @ApiResponse({ status: 401, description: 'Unauthorized' })
+  @ApiResponse({ status: 403, description: 'Admin access required' })
   @ApiResponse({ status: 404, description: 'Puzzle not found' })
   async remove(@Param('id') id: string): Promise<ApiResponseDto<Puzzle>> {
     const puzzle = await this.puzzlesService.remove(id);
@@ -200,7 +215,9 @@ export class DecoderController {
 
   @Post('validate')
   @HttpCode(HttpStatus.OK)
-  @ApiOperation({ summary: "Validate a user's decode attempt against a puzzle" })
+  @ApiOperation({
+    summary: "Validate a user's decode attempt against a puzzle",
+  })
   @ApiResponse({
     status: 200,
     description: 'Returns validation result with similarity score',

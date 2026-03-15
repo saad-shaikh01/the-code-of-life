@@ -26,6 +26,16 @@ export const usersService = {
     apiClient.patch<User>('/users/profile', data, true),
 
   /**
+   * Upload user avatar
+   */
+  uploadAvatar: (file: File) => {
+    const formData = new FormData();
+    formData.append('avatar', file);
+
+    return apiClient.post<{ avatarUrl: string }>('/users/avatar', formData, true);
+  },
+
+  /**
    * Get user statistics
    */
   getStats: () => apiClient.get<UserStats>('/users/stats', true),

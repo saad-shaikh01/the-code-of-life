@@ -2,7 +2,12 @@
 
 import * as React from "react";
 import { useRouter } from "next/navigation";
-import { Header, Sidebar } from "@/components/layout";
+import ErrorBoundary from "@/components/providers/ErrorBoundary";
+import {
+  EmailVerificationBanner,
+  Header,
+  Sidebar,
+} from "@/components/layout";
 import { Spinner } from "@/components/ui";
 import { ROUTES } from "@/config/constants";
 import { useAuthStore } from "@/stores";
@@ -26,7 +31,9 @@ export default function MainLayout({
   }, [router, shouldRedirectToLogin]);
 
   if (isAuthPending || shouldRedirectToLogin) {
-    const title = isAuthPending ? "Restoring your session..." : "Redirecting to sign in...";
+    const title = isAuthPending
+      ? "Restoring your session..."
+      : "Redirecting to sign in...";
     const description = isAuthPending
       ? "Checking your saved login with the server."
       : "This page requires an active account session.";
@@ -54,14 +61,19 @@ export default function MainLayout({
 
       {/* Header */}
       <Header />
+      <EmailVerificationBanner />
 
       {/* Sidebar + Content */}
       <div className="flex">
         <Sidebar className="hidden lg:block" />
 
-        <main className="flex-1 lg:pl-64 transition-all duration-300">
-          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">{children}</div>
-        </main>
+        <ErrorBoundary>
+          <main className="flex-1 lg:pl-64 transition-all duration-300">
+            <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+              {children}
+            </div>
+          </main>
+        </ErrorBoundary>
       </div>
     </div>
   );

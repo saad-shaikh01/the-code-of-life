@@ -20,14 +20,14 @@ export function AuthInitializer() {
     let isActive = true;
 
     const initializeAuth = async () => {
+      apiClient.syncSessionCookie();
+
       if (!apiClient.hasStoredSession()) {
         if (isActive) {
           setAuthReady(true);
         }
         return;
       }
-
-      apiClient.syncSessionCookie();
 
       try {
         await refreshUser();

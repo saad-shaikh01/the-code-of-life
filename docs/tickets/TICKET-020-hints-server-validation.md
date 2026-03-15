@@ -5,94 +5,125 @@
 - **Priority:** P2
 - **Type:** bug
 - **Area:** backend
-- **Status:** open
+- **Status:** done
 - **Dependencies:** none
 
 ---
 
 ## Problem
-When a player submits puzzle progress (`POST /api/progress`), the request body includes `hintsUsed` sent by the client. The backend stores this value without validation. A user can manipulate the request payload to claim they used 0 hints even if they requested 3, artificially inflating their score and polluting leaderboards.
+When a player submits puzzle progress (`POST /api/progress`), the request body includes `hintsUsed` sent by the client. The backend previously accepted and stored that value without enforcing an upper bound, so a manipulated client could submit impossible values that would pollute progress records and score-related behavior.
 
-Score formula: `base(100) - (25 * hintsUsed) + timeBonus` — claiming 0 hints = 75 extra points per puzzle.
+This ticket's minimum viable fix is to ensure `hintsUsed` is a plausible integer in the `0..3` range on the server.
 
 ---
 
 ## Why This Matters
-Score integrity directly affects the leaderboard. Cheating by underreporting hints is trivially easy with browser DevTools or any HTTP client. This undermines the competitive fairness of the game.
+Score integrity affects competitive fairness and leaderboard trust. Even without full server-side hint tracking, the backend must reject impossible values instead of trusting the client blindly.
 
 ---
 
 ## Evidence
-- `backend/src/modules/progress/progress.service.ts` — `submitProgress()` accepts `hintsUsed` from request body with no validation
-- `backend/src/modules/progress/dto/submit-progress.dto.ts` (or equivalent) — `hintsUsed: number` accepted as-is
-- `frontend/src/config/constants.ts` — `HINTS_PER_PUZZLE: 3` defines the maximum
+- `backend/src/modules/progress/progress.service.ts` previously accepted `input.hintsUsed` without server-side bounds validation
+- `packages/shared/src/schemas/progress.schema.ts` previously required `hintsUsed >= 0` but did not cap the maximum
+- `frontend/src/config/constants.ts` already defined the gameplay maximum as `3`, but the backend had no shared equivalent
 
 ---
 
 ## Scope
-
-### Minimum viable fix (this ticket):
-Add a server-side bounds check in `ProgressService.submitProgress()`:
-```typescript
-const MAX_HINTS = 3; // Match GAME_CONFIG.HINTS_PER_PUZZLE
-if (input.hintsUsed < 0 || input.hintsUsed > MAX_HINTS) {
-  throw new BadRequestException(`hintsUsed must be between 0 and ${MAX_HINTS}`);
-}
-```
-
-This prevents impossible values but does not prevent a user from claiming 0 hints when they used 3.
-
-### Stronger fix (stretch goal for this ticket):
-Track hint requests server-side. When a player calls the hints endpoint (or when hints are revealed), record the count server-side per user-puzzle session.
-
-**Option A — In-memory session (simpler):**
-In `ProgressService` or a new `HintSessionService`, maintain a per-user-per-puzzle hint counter in memory (Map). When `submitProgress` is called, compare `input.hintsUsed` with the server-tracked count. Accept the higher of the two (server-tracked count wins).
-
-**Option B — Database tracking:**
-Add a `hintsRequested Int @default(0)` field to `UserProgress`. Increment it via `POST /api/progress/hint/:puzzleId` endpoint. On submission, use the DB value instead of client-supplied value.
-
-**Recommended for this ticket:** Implement Option A (in-memory) as a pragmatic improvement. Option B is the full solution but requires a schema migration — leave it for a future ticket.
+1. Add a shared `HINTS_PER_PUZZLE = 3` constant for server-side use
+2. Enforce `hintsUsed` schema validation with `z.number().int().min(0).max(3)`
+3. Add a backend guard in `ProgressService.submitProgress()` so invalid values still fail if the service is called outside the controller pipe
+4. Keep existing score calculation behavior unchanged
 
 ---
 
 ## Out of Scope
-- Redesigning the hint UI
-- Score recalculation for historical data
-- Option B (full DB tracking) — noted as future work
+- Full server-side hint tracking
+- Score recalculation from trusted server-side inputs
+- Frontend hint UI changes
 
 ---
 
 ## Implementation Notes
-- `HINTS_PER_PUZZLE` should be a shared constant in `packages/shared/src/constants/` to avoid magic numbers in the backend
-- If the in-memory session is used, note that it does not survive server restarts — acceptable for the current scope
-- The score calculation currently happens on the frontend and is submitted. Consider: should the backend recalculate score from `hintsUsed`? This would fully prevent score manipulation. The backend has all needed data (puzzle completion time is submitted too). Recalculation is the most secure approach — add it here if in scope.
+- Added `HINTS_PER_PUZZLE` in `packages/shared/src/constants.ts` and exported it from the shared package root.
+- Updated `submitProgressSchema` in `packages/shared/src/schemas/progress.schema.ts` to validate:
+  - integer only
+  - minimum `0`
+  - maximum `HINTS_PER_PUZZLE`
+- Added a defensive backend guard in `ProgressService.submitProgress()` that throws:
+  - `BadRequestException('hintsUsed must be an integer')`
+  - `BadRequestException('hintsUsed cannot be negative')`
+  - `BadRequestException('hintsUsed cannot exceed 3')`
+- Kept the existing score and progress update behavior unchanged after validation, per ticket scope.
+- Scope correction:
+  - the older ticket draft mentioned a stretch goal for server-tracked hint sessions
+  - the implementation prompt explicitly limited this ticket to plausible integer `0..3` validation
+  - no in-memory or database hint tracking was added here
 
 ---
 
 ## Acceptance Criteria
-- [ ] `POST /api/progress` with `hintsUsed: -1` returns 400
-- [ ] `POST /api/progress` with `hintsUsed: 10` (above max) returns 400
-- [ ] `POST /api/progress` with `hintsUsed: 2` (valid) succeeds
-- [ ] (Stretch) Server-tracked hint count overrides client-supplied value when it's higher
+- [x] `POST /api/progress` with `hintsUsed: -1` returns 400
+- [x] `POST /api/progress` with `hintsUsed: 10` (above max) returns 400
+- [x] `POST /api/progress` with `hintsUsed: 2` (valid) succeeds
+- [x] Stretch goal intentionally deferred: no server-tracked hint session override was added in this ticket
 
 ---
 
 ## Testing Requirements
-- **Unit test `ProgressService.submitProgress()`:** Test with `hintsUsed: -1`, `4`, `0`, `3` — verify correct behavior
-- **Integration test:** Submit progress with invalid `hintsUsed` → verify 400 response
+- **Automated coverage added:**
+  1. `ProgressService.submitProgress()` rejects `-1`, `4`, and `1.5`, and still accepts valid values
+  2. shared `submitProgressSchema` rejects invalid `hintsUsed` values before the request reaches the service
+- **Manual QA recommended:**
+  1. Submit progress with `hintsUsed` values outside `0..3` and verify the API responds with `400`
+  2. Submit valid progress and verify existing scoring/progress flows still work
 
 ---
 
 ## Affected Areas
+- `packages/shared/src/constants.ts`
+- `packages/shared/src/index.ts`
+- `packages/shared/src/schemas/progress.schema.ts`
 - `backend/src/modules/progress/progress.service.ts`
-- `packages/shared/src/constants/` (add `MAX_HINTS_PER_PUZZLE`)
+- `backend/src/modules/progress/progress.service.spec.ts`
+- `backend/src/modules/progress/schemas/progress.schema.spec.ts`
 
 ---
 
 ## Risks / Edge Cases
-- The frontend currently sends `hintsUsed` from `useGameStore`. If the game allows fewer than 3 hints (e.g., for easier puzzles), the max should be per-puzzle — not a global constant. For now, assume all puzzles allow up to 3 hints.
+- This prevents impossible values but does not stop a user from underreporting a plausible `0..3` hint count. Full server-tracked hint integrity remains future work.
+- The backend still trusts the submitted `score`; this ticket deliberately did not recalculate score server-side.
 
 ---
 
 ## Open Questions
-- Should the backend fully recalculate the score (ignoring client-supplied score entirely)? This would completely eliminate score manipulation. The data needed is: `hintsUsed`, `timeSpent`, `completed`. If yes, remove `score` from the submission DTO.
+- Should a future ticket move score calculation fully server-side so `score` is no longer client-authoritative?
+
+---
+
+## Files Changed
+- `packages/shared/src/constants.ts`
+- `packages/shared/src/index.ts`
+- `packages/shared/src/schemas/progress.schema.ts`
+- `backend/src/modules/progress/progress.service.ts`
+- `backend/src/modules/progress/progress.service.spec.ts`
+- `backend/src/modules/progress/schemas/progress.schema.spec.ts`
+- `docs/tickets/TICKET-020-hints-server-validation.md`
+- `docs/tickets/README.md`
+
+---
+
+## Validation Performed
+- `packages/shared`: `npm run build`
+- `repo root`: `npx eslint -c backend/eslint.config.mjs "packages/shared/src/constants.ts" "packages/shared/src/index.ts" "packages/shared/src/schemas/progress.schema.ts"`
+- `backend`: `npx eslint -- "src/modules/progress/progress.service.ts" "src/modules/progress/progress.service.spec.ts" "src/modules/progress/schemas/progress.schema.spec.ts"`
+- `backend`: `npm run test -- progress.service.spec.ts progress.schema.spec.ts --runInBand`
+- `backend`: `npm run test -- --runInBand`
+- `backend`: `npm run build`
+
+---
+
+## Follow-up Notes
+- Completed: 2026-03-15.
+- The full backend test suite still emits the existing mocked `BattleGateway` error logs during passing tests; that pre-existing harness behavior is unrelated to this ticket.
+- No frontend changes were made.

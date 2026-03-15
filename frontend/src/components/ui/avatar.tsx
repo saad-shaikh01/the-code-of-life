@@ -1,6 +1,7 @@
 "use client";
 
 import * as React from "react";
+import { API_CONFIG } from "@/config/constants";
 import { cn } from "@/lib/utils";
 
 export interface AvatarProps extends React.HTMLAttributes<HTMLDivElement> {
@@ -20,6 +21,33 @@ const sizeStyles = {
 const Avatar = React.forwardRef<HTMLDivElement, AvatarProps>(
   ({ className, src, alt, fallback, size = "md", ...props }, ref) => {
     const [hasError, setHasError] = React.useState(false);
+
+    const resolvedSrc = React.useMemo(() => {
+      if (!src) return null;
+
+      if (
+        src.startsWith("http://") ||
+        src.startsWith("https://") ||
+        src.startsWith("data:") ||
+        src.startsWith("blob:")
+      ) {
+        return src;
+      }
+
+      if (src.startsWith("/")) {
+        try {
+          return `${new URL(API_CONFIG.BASE_URL).origin}${src}`;
+        } catch {
+          return src;
+        }
+      }
+
+      return src;
+    }, [src]);
+
+    React.useEffect(() => {
+      setHasError(false);
+    }, [resolvedSrc]);
 
     const initials = React.useMemo(() => {
       if (fallback) return fallback.slice(0, 2).toUpperCase();
@@ -47,10 +75,10 @@ const Avatar = React.forwardRef<HTMLDivElement, AvatarProps>(
         )}
         {...props}
       >
-        {src && !hasError ? (
+        {resolvedSrc && !hasError ? (
           // eslint-disable-next-line @next/next/no-img-element
           <img
-            src={src}
+            src={resolvedSrc}
             alt={alt || "Avatar"}
             className="h-full w-full object-cover"
             onError={() => setHasError(true)}

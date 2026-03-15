@@ -5,82 +5,134 @@
 - **Priority:** P3
 - **Type:** bug
 - **Area:** backend
-- **Status:** open
+- **Status:** done
 - **Dependencies:** none
 
 ---
 
 ## Problem
-The battle gateway (`battle.gateway.ts`) receives WebSocket message bodies via `@MessageBody()` without any schema validation. A malformed payload (e.g., missing required fields, wrong types) will either cause a runtime error deep in the service logic or silently produce wrong game state.
+The battle gateway accepted raw `@MessageBody()` payloads for every Socket.IO event with no schema validation. Malformed bodies could reach the battle service layer, produce inconsistent match state, or throw runtime errors deep in the handler flow.
 
-Example: `join_lobby` event expects `{ lobbyId?: string, difficulty?: string }`. If a client sends `{ lobbyId: 12345 }` (number instead of string), the service may crash or produce a TypeError.
+Example: `join_lobby` expects `{ lobbyId?: string, puzzleDifficulty?: BattleDifficulty }`. A payload like `{ lobbyId: 12345 }` previously bypassed validation and reached the service layer unchanged.
 
 ---
 
 ## Why This Matters
-WebSocket endpoints are as exposed as REST endpoints. Without validation, the server is vulnerable to:
-- Crashes from unexpected payload shapes
-- Invalid game state from malformed data
-- Potential DoS via carefully crafted payloads that trigger expensive operations
+WebSocket endpoints need the same input hardening as REST endpoints. Without it, malformed messages can:
+- Crash or destabilize battle state
+- Produce invalid lobby or progress data
+- Increase the blast radius of malicious or buggy clients
 
 ---
 
 ## Evidence
-- `backend/src/modules/battle/battle.gateway.ts` — `@MessageBody()` used with no pipes or validation schemas
-- NestJS supports `ZodValidationPipe` via `nestjs-zod` (already installed: `nestjs-zod ^5.1.1` in `backend/package.json`)
+- `backend/src/modules/battle/battle.gateway.ts` originally accepted raw `@MessageBody()` values for `ping`, `join_lobby`, `leave_lobby`, `player_ready`, `progress_update`, and `submit_solution`
+- `packages/shared/src/schemas/` did not include body-level schemas for those incoming gateway payloads
 
 ---
 
 ## Scope
 
-### 1. Define Zod schemas for each incoming WebSocket event
+### 1. Define Zod schemas for each incoming WebSocket event body
 
-Create `backend/src/modules/battle/dto/battle-ws.schemas.ts`:
+Create `packages/shared/src/schemas/battle.schema.ts` with schemas for the actual gateway payloads:
 
 ```typescript
-import { z } from 'zod';
+import { z } from "zod";
 
-export const joinLobbySchema = z.object({
-  lobbyId: z.string().uuid().optional(),
-  difficulty: z.enum(['BEGINNER', 'INTERMEDIATE', 'ADVANCED', 'MASTER']).optional(),
-});
+export const battleDifficultySchema = z.enum([
+  "BEGINNER",
+  "INTERMEDIATE",
+  "ADVANCED",
+  "MASTER",
+]);
 
-export const playerReadySchema = z.object({
-  isReady: z.boolean(),
-});
+export const pingMessageSchema = z
+  .object({
+    timestamp: z.number().int().nonnegative().optional(),
+  })
+  .strict();
 
-export const progressUpdateSchema = z.object({
-  progress: z.number().min(0).max(100),
-  currentInput: z.string().max(500).optional(),
-});
+export const joinLobbyMessageSchema = z
+  .object({
+    lobbyId: z.string().min(1).optional(),
+    puzzleDifficulty: battleDifficultySchema.optional(),
+  })
+  .strict();
 
-export const submitSolutionSchema = z.object({
-  solution: z.string().min(1).max(1000),
-  timeElapsed: z.number().min(0),
-  hintsUsed: z.number().min(0).max(3),
-});
+export const leaveLobbyMessageSchema = z
+  .object({
+    lobbyId: z.string().min(1),
+  })
+  .strict();
+
+export const playerReadyMessageSchema = z
+  .object({
+    lobbyId: z.string().min(1),
+    isReady: z.boolean(),
+  })
+  .strict();
+
+export const progressUpdateMessageSchema = z
+  .object({
+    lobbyId: z.string().min(1),
+    progress: z.number().min(0).max(100),
+    correctCharacters: z.number().int().min(0),
+    totalCharacters: z.number().int().min(0),
+    hintsUsed: z.number().int().min(0).max(3),
+  })
+  .strict();
+
+export const submitSolutionMessageSchema = z
+  .object({
+    lobbyId: z.string().min(1),
+    solution: z.string().min(1).max(5000),
+    timeElapsed: z.number().int().min(0),
+  })
+  .strict();
 ```
 
 ### 2. Apply validation in gateway handlers
 
-Using `ZodValidationPipe` from `nestjs-zod`:
+Validate inline at the top of each handler and stop on failure:
+
 ```typescript
-@SubscribeMessage('join_lobby')
+@SubscribeMessage("join_lobby")
 async handleJoinLobby(
   @ConnectedSocket() client: Socket,
-  @MessageBody(new ZodValidationPipe(joinLobbySchema)) data: JoinLobbyDto,
+  @MessageBody() payload: unknown,
 ) {
-  // data is guaranteed to match schema
+  const parsed = joinLobbyMessageSchema.safeParse(payload);
+  if (!parsed.success) {
+    client.emit("error", {
+      message: "Invalid payload",
+      errors: parsed.error.issues,
+    });
+    client.emit("battle_error", {
+      code: "INVALID_PAYLOAD",
+      message: "Invalid payload",
+    });
+    return;
+  }
+
+  const data = parsed.data;
+  // continue with validated data
 }
 ```
 
-Repeat for each `@SubscribeMessage` handler.
-
 ### 3. Handle validation errors gracefully
-When validation fails, emit a `battle_error` event back to the client (rather than crashing):
+
+Do not throw from WebSocket handlers for malformed payloads. Emit a client-visible error and return:
+
 ```typescript
-// In a WS exception filter or within the handler:
-client.emit('battle_error', { message: 'Invalid message format' });
+client.emit("error", {
+  message: "Invalid payload",
+  errors: issues,
+});
+client.emit("battle_error", {
+  code: "INVALID_PAYLOAD",
+  message: "Invalid payload",
+});
 ```
 
 ---
@@ -88,41 +140,91 @@ client.emit('battle_error', { message: 'Invalid message format' });
 ## Out of Scope
 - Changing battle game logic
 - Adding rate limiting to WS events
+- Reworking Socket.IO room persistence
 
 ---
 
 ## Implementation Notes
-- `nestjs-zod` is already installed — use `ZodValidationPipe` directly
-- NestJS WS exception handling: use `@UseFilters()` with a custom `WsExceptionFilter` to catch validation errors and emit them as `battle_error` events rather than disconnecting the socket
-- Type the `data` parameter using the inferred Zod type: `z.infer<typeof joinLobbySchema>`
+- Added `packages/shared/src/schemas/battle.schema.ts` for the actual incoming Socket.IO payload shapes:
+  - `ping`
+  - `join_lobby`
+  - `leave_lobby`
+  - `player_ready`
+  - `progress_update`
+  - `submit_solution`
+- Exported the new schemas from `packages/shared/src/schemas/index.ts`, which is already re-exported by the shared package root.
+- Implemented a shared `validatePayload()` helper inside `BattleGateway` and switched each handler to `@MessageBody() payload: unknown`.
+- Invalid payloads now emit both:
+  - `error` with `{ message: 'Invalid payload', errors: issues }`
+  - `battle_error` with `{ code: 'INVALID_PAYLOAD', message: 'Invalid payload' }`
+- No `WsValidationPipe` was added because this gateway did not already use Nest WebSocket pipes, and the backlog prompt explicitly preferred inline validation when no existing pipe pattern was present.
+- Correction to the older audit draft:
+  - the final schemas live in the shared package, not `backend/src/modules/battle/dto/`
+  - the actual field is `puzzleDifficulty`, not `difficulty`
 
 ---
 
 ## Acceptance Criteria
-- [ ] `join_lobby` with invalid `difficulty` value emits `battle_error` instead of crashing
-- [ ] `submit_solution` with missing `solution` field emits `battle_error`
-- [ ] `progress_update` with `progress: 150` (out of range) emits `battle_error`
-- [ ] Valid messages continue to work correctly
-- [ ] Server does not throw unhandled exceptions for any malformed WS message
+- [x] `join_lobby` with invalid `difficulty` value emits `battle_error` instead of crashing
+- [x] `submit_solution` with missing `solution` field emits `battle_error`
+- [x] `progress_update` with `progress: 150` (out of range) emits `battle_error`
+- [x] Valid messages continue to work correctly
+- [x] Server does not throw unhandled exceptions for any malformed WS message
 
 ---
 
 ## Testing Requirements
-- **Unit test `battle.gateway.ts`:** Send malformed payloads — verify `battle_error` emitted, no exception thrown
-- **Manual QA:** Use a WebSocket client (e.g., Postman or wscat) to send malformed messages — verify error response
+- **Automated coverage added:**
+  - invalid `join_lobby` payload emits validation errors and skips `battleService.joinLobby`
+  - invalid `player_ready` payload emits validation errors and skips `battleService.setPlayerReady`
+  - invalid `progress_update` payload emits validation errors and skips `battleService.updateProgress`
+  - invalid `submit_solution` payload emits validation errors and skips `battleService.submitSolution`
+- **Manual QA recommended:**
+  1. Connect a WS client to `/battle` and send malformed `join_lobby`, `progress_update`, and `submit_solution` payloads
+  2. Verify the server responds with `battle_error` instead of disconnecting or crashing
+  3. Verify valid join, ready, progress, and submit flows still behave normally
 
 ---
 
 ## Affected Areas
+- `packages/shared/src/schemas/battle.schema.ts`
+- `packages/shared/src/schemas/index.ts`
 - `backend/src/modules/battle/battle.gateway.ts`
-- New: `backend/src/modules/battle/dto/battle-ws.schemas.ts`
+- `backend/src/modules/battle/battle.gateway.spec.ts`
 
 ---
 
 ## Risks / Edge Cases
-- If `ZodValidationPipe` throws a HTTP exception class for WS context, it may not be automatically converted to a WS error — test this and add an explicit filter if needed
+- This ticket only validates message shape. Battle state still depends on the existing in-memory room model and business rules in `BattleService`.
+- The gateway currently emits both `error` and `battle_error` for invalid payloads to satisfy the backlog prompt and preserve the existing battle error contract.
 
 ---
 
 ## Open Questions
 None.
+
+---
+
+## Files Changed
+- `packages/shared/src/schemas/battle.schema.ts`
+- `packages/shared/src/schemas/index.ts`
+- `backend/src/modules/battle/battle.gateway.ts`
+- `backend/src/modules/battle/battle.gateway.spec.ts`
+- `docs/tickets/TICKET-026-websocket-input-validation.md`
+- `docs/tickets/README.md`
+
+---
+
+## Validation Performed
+- `packages/shared`: `npm run build`
+- `repo root`: `npx eslint -c backend/eslint.config.mjs "packages/shared/src/schemas/battle.schema.ts" "packages/shared/src/schemas/index.ts" "packages/shared/src/index.ts"`
+- `backend`: `npx eslint -- "src/modules/battle/battle.gateway.ts" "src/modules/battle/battle.gateway.spec.ts"`
+- `backend`: `npm run test -- battle.gateway.spec.ts --runInBand`
+- `backend`: `npm run build`
+
+---
+
+## Follow-up Notes
+- Completed: 2026-03-15.
+- The targeted gateway spec still prints the existing mocked `BattleGateway` error logs from negative-path tests; the suite passes and no new unhandled exception path was introduced.
+- `ts-jest` warns about compiling `packages/shared/dist/*.js` after the shared build because backend Jest still matches `.js` files with `ts-jest`. That warning did not block this ticket.

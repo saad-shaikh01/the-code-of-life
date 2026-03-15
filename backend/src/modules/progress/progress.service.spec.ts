@@ -1,7 +1,7 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { ProgressService } from './progress.service';
 import { PrismaService } from '../../prisma';
-import { NotFoundException } from '@nestjs/common';
+import { BadRequestException, NotFoundException } from '@nestjs/common';
 import { UsersService } from '../users';
 
 describe('ProgressService', () => {
@@ -27,6 +27,7 @@ describe('ProgressService', () => {
   };
   const mockUsersService = {
     updateStreak: jest.fn(),
+    updateGrowth: jest.fn(),
   };
 
   beforeEach(async () => {
@@ -49,6 +50,10 @@ describe('ProgressService', () => {
     // Clear all mocks before each test
     jest.clearAllMocks();
     mockUsersService.updateStreak.mockResolvedValue(1);
+    mockUsersService.updateGrowth.mockResolvedValue({
+      growthPoints: 10,
+      growthStage: 1,
+    });
   });
 
   it('should be defined', () => {
@@ -69,13 +74,50 @@ describe('ProgressService', () => {
     it('should throw NotFoundException if puzzle does not exist', async () => {
       mockPrismaService.puzzle.findUnique.mockResolvedValue(null);
 
+      await expect(service.submitProgress(userId, submitInput)).rejects.toThrow(
+        NotFoundException,
+      );
+    });
+
+    it('throws BadRequestException when hintsUsed is negative', async () => {
       await expect(
-        service.submitProgress(userId, submitInput),
-      ).rejects.toThrow(NotFoundException);
+        service.submitProgress(userId, {
+          ...submitInput,
+          hintsUsed: -1,
+        }),
+      ).rejects.toThrow(BadRequestException);
+
+      expect(mockPrismaService.puzzle.findUnique).not.toHaveBeenCalled();
+    });
+
+    it('throws BadRequestException when hintsUsed exceeds the server maximum', async () => {
+      await expect(
+        service.submitProgress(userId, {
+          ...submitInput,
+          hintsUsed: 4,
+        }),
+      ).rejects.toThrow('hintsUsed cannot exceed 3');
+
+      expect(mockPrismaService.puzzle.findUnique).not.toHaveBeenCalled();
+    });
+
+    it('throws BadRequestException when hintsUsed is not an integer', async () => {
+      await expect(
+        service.submitProgress(userId, {
+          ...submitInput,
+          hintsUsed: 1.5,
+        }),
+      ).rejects.toThrow(BadRequestException);
+
+      expect(mockPrismaService.puzzle.findUnique).not.toHaveBeenCalled();
     });
 
     it('should create new progress if none exists', async () => {
-      const puzzle = { id: puzzleId, title: 'Test Puzzle' };
+      const puzzle = {
+        id: puzzleId,
+        title: 'Test Puzzle',
+        difficulty: 'BEGINNER',
+      };
       const createdProgress = {
         id: 'progress-123',
         userId,
@@ -106,17 +148,22 @@ describe('ProgressService', () => {
           userId,
           puzzleId,
           completed: true,
-          completedAt: expect.any(Date),
+          completedAt: expect.any(Date) as Date,
           score: 100,
           timeSpent: 300,
           hintsUsed: 0,
         },
       });
+      expect(mockUsersService.updateGrowth).toHaveBeenCalledWith(userId, 10);
       expect(mockUsersService.updateStreak).toHaveBeenCalledWith(userId);
     });
 
     it('should update existing progress with higher score', async () => {
-      const puzzle = { id: puzzleId, title: 'Test Puzzle' };
+      const puzzle = {
+        id: puzzleId,
+        title: 'Test Puzzle',
+        difficulty: 'ADVANCED',
+      };
       const existingProgress = {
         id: 'progress-123',
         userId,
@@ -137,7 +184,9 @@ describe('ProgressService', () => {
       };
 
       mockPrismaService.puzzle.findUnique.mockResolvedValue(puzzle);
-      mockPrismaService.userProgress.findUnique.mockResolvedValue(existingProgress);
+      mockPrismaService.userProgress.findUnique.mockResolvedValue(
+        existingProgress,
+      );
       mockPrismaService.userProgress.update.mockResolvedValue(updatedProgress);
       mockPrismaService.user.findUnique.mockResolvedValue({
         id: userId,
@@ -151,7 +200,88 @@ describe('ProgressService', () => {
 
       expect(result).toEqual(updatedProgress);
       expect(mockPrismaService.userProgress.update).toHaveBeenCalled();
+      expect(mockUsersService.updateGrowth).toHaveBeenCalledWith(userId, 30);
       expect(mockUsersService.updateStreak).toHaveBeenCalledWith(userId);
+    });
+
+    it('stores the minimum hintsUsed value across higher-score resubmissions', async () => {
+      const puzzle = {
+        id: puzzleId,
+        title: 'Test Puzzle',
+        difficulty: 'INTERMEDIATE',
+      };
+      const completedAt = new Date('2026-03-15T10:00:00.000Z');
+      const existingProgress = {
+        id: 'progress-123',
+        userId,
+        puzzleId,
+        completed: true,
+        completedAt,
+        score: 80,
+        timeSpent: 200,
+        hintsUsed: 1,
+      };
+      const updatedProgress = {
+        ...existingProgress,
+        score: 120,
+        timeSpent: 180,
+        hintsUsed: 1,
+      };
+
+      mockPrismaService.puzzle.findUnique.mockResolvedValue(puzzle);
+      mockPrismaService.userProgress.findUnique.mockResolvedValue(
+        existingProgress,
+      );
+      mockPrismaService.userProgress.update.mockResolvedValue(updatedProgress);
+
+      const result = await service.submitProgress(userId, {
+        ...submitInput,
+        score: 120,
+        timeSpent: 180,
+        hintsUsed: 3,
+      });
+
+      expect(result).toEqual(updatedProgress);
+      expect(mockPrismaService.userProgress.update).toHaveBeenCalledWith({
+        where: { id: 'progress-123' },
+        data: {
+          completed: true,
+          completedAt,
+          score: 120,
+          timeSpent: 180,
+          hintsUsed: 1,
+        },
+      });
+      expect(mockUsersService.updateGrowth).not.toHaveBeenCalled();
+      expect(mockUsersService.updateStreak).not.toHaveBeenCalled();
+    });
+
+    it('defaults growth points to 10 when the puzzle difficulty is missing', async () => {
+      const puzzle = { id: puzzleId, title: 'Legacy Puzzle' };
+
+      mockPrismaService.puzzle.findUnique.mockResolvedValue(puzzle);
+      mockPrismaService.userProgress.findUnique.mockResolvedValue(null);
+      mockPrismaService.userProgress.create.mockResolvedValue({
+        id: 'progress-123',
+        userId,
+        puzzleId,
+        completed: true,
+        completedAt: new Date(),
+        score: 100,
+        timeSpent: 300,
+        hintsUsed: 0,
+      });
+      mockPrismaService.user.findUnique.mockResolvedValue({
+        id: userId,
+        totalScore: 0,
+        currentLevel: 1,
+      });
+      mockPrismaService.userProgress.count.mockResolvedValue(1);
+      mockPrismaService.user.update.mockResolvedValue({});
+
+      await service.submitProgress(userId, submitInput);
+
+      expect(mockUsersService.updateGrowth).toHaveBeenCalledWith(userId, 10);
     });
 
     it('should not update if new score is lower and already completed', async () => {
@@ -168,9 +298,14 @@ describe('ProgressService', () => {
       };
 
       mockPrismaService.puzzle.findUnique.mockResolvedValue(puzzle);
-      mockPrismaService.userProgress.findUnique.mockResolvedValue(existingProgress);
+      mockPrismaService.userProgress.findUnique.mockResolvedValue(
+        existingProgress,
+      );
 
-      const result = await service.submitProgress(userId, { ...submitInput, score: 100 });
+      const result = await service.submitProgress(userId, {
+        ...submitInput,
+        score: 100,
+      });
 
       expect(result).toEqual(existingProgress);
       expect(mockPrismaService.userProgress.update).not.toHaveBeenCalled();
@@ -183,7 +318,10 @@ describe('ProgressService', () => {
     const puzzleId = 'puzzle-123';
 
     beforeEach(() => {
-      mockPrismaService.puzzle.findUnique.mockResolvedValue({ id: puzzleId });
+      mockPrismaService.puzzle.findUnique.mockResolvedValue({
+        id: puzzleId,
+        difficulty: 'BEGINNER',
+      });
       mockPrismaService.userProgress.findUnique.mockResolvedValue(null);
       mockPrismaService.userProgress.create.mockResolvedValue({
         id: 'progress-123',
@@ -214,6 +352,7 @@ describe('ProgressService', () => {
         hintsUsed: 0,
       });
 
+      expect(mockUsersService.updateGrowth).toHaveBeenCalledWith(userId, 10);
       expect(mockUsersService.updateStreak).toHaveBeenCalledWith(userId);
     });
 
@@ -253,6 +392,7 @@ describe('ProgressService', () => {
         hintsUsed: 0,
       });
 
+      expect(mockUsersService.updateGrowth).toHaveBeenCalledWith(userId, 10);
       expect(mockUsersService.updateStreak).toHaveBeenCalledWith(userId);
     });
 
@@ -281,11 +421,12 @@ describe('ProgressService', () => {
         userId,
         puzzleId,
         completed: true,
-        completedAt: expect.any(Date),
+        completedAt: expect.any(Date) as Date,
         score: 150,
         timeSpent: 200,
         hintsUsed: 0,
       });
+      expect(mockUsersService.updateGrowth).not.toHaveBeenCalled();
       expect(mockUsersService.updateStreak).not.toHaveBeenCalled();
     });
   });
@@ -376,6 +517,8 @@ describe('ProgressService', () => {
           totalScore: 0,
           currentLevel: 1,
           streakDays: 0,
+          growthPoints: 0,
+          growthStage: 1,
         },
       });
     });

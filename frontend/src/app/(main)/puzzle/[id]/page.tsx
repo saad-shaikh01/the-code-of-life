@@ -1,6 +1,7 @@
 "use client";
 
 import * as React from "react";
+import { useQuery } from "@tanstack/react-query";
 import { useParams, useRouter } from "next/navigation";
 import { motion, AnimatePresence } from "framer-motion";
 import confetti from "canvas-confetti";
@@ -34,9 +35,10 @@ import {
   DialogDescription,
   DialogFooter,
 } from "@/components/ui";
-import { tokenizeEncryptedPattern } from "@/lib/cipher";
+import { CIPHER_MAP, tokenizeEncryptedPattern } from "@/lib/cipher";
 import { GAME_CONFIG } from "@/config/constants";
 import { CipherTokenCell } from "@/modules/puzzles/components/CipherTokenCell";
+import { DecoderPanel } from "@/modules/puzzles/components/DecoderPanel";
 
 export default function PuzzlePage() {
   const params = useParams();
@@ -58,8 +60,10 @@ export default function PuzzlePage() {
     isCompleted,
     isCorrect,
     similarity,
+    symbolMap,
     setPuzzle,
     setUserInput,
+    setSymbolMap,
     useHint: revealHint,
     startTimer,
     updateElapsedTime,
@@ -71,6 +75,17 @@ export default function PuzzlePage() {
   const [showResult, setShowResult] = React.useState(false);
   const [isSubmitting, setIsSubmitting] = React.useState(false);
   const [showHintDialog, setShowHintDialog] = React.useState(false);
+  const { data: symbolMapData, isLoading: symbolMapLoading } = useQuery({
+    queryKey: ["decoder", "symbol-map"],
+    queryFn: () => decoderService.getSymbolMap(),
+    staleTime: Infinity,
+  });
+
+  React.useEffect(() => {
+    if (symbolMapData?.data) {
+      setSymbolMap(symbolMapData.data);
+    }
+  }, [setSymbolMap, symbolMapData]);
 
   // Initialize puzzle in store when loaded
   React.useEffect(() => {
@@ -176,7 +191,7 @@ export default function PuzzlePage() {
 
   if (puzzleLoading) {
     return (
-      <div className="max-w-4xl mx-auto space-y-6">
+      <div className="max-w-6xl mx-auto space-y-6">
         <Skeleton className="h-12 w-64" />
         <Skeleton className="h-64 w-full" />
         <Skeleton className="h-48 w-full" />
@@ -200,13 +215,16 @@ export default function PuzzlePage() {
   const puzzle = currentPuzzle;
   const encryptedTokens = tokenizeEncryptedPattern(puzzle.encryptedPattern);
   const availableHints = Math.min(GAME_CONFIG.HINTS_PER_PUZZLE, puzzle.hints.length) - hintsUsed;
+  const decoderMap =
+    Object.keys(symbolMap).length > 0 ? symbolMap : CIPHER_MAP;
+  const showDecoderPanel = !showResult && !isCompleted;
 
   return (
     <>
       <motion.div
         initial={{ opacity: 0 }}
         animate={{ opacity: 1 }}
-        className="max-w-4xl mx-auto"
+        className="max-w-6xl mx-auto"
       >
         <PageHeader
           title={puzzle.title}
@@ -249,7 +267,8 @@ export default function PuzzlePage() {
         </div>
 
         {/* Main Puzzle Area */}
-        <Card variant="elevated" glow="gold" className="mb-6">
+        <div className="mb-6 grid gap-6 xl:grid-cols-[minmax(0,1fr)_22rem] xl:items-start">
+          <Card variant="elevated" glow="gold">
           <CardContent className="py-8">
             {/* Symbol Display */}
             <div className="text-center mb-8">
@@ -326,7 +345,18 @@ export default function PuzzlePage() {
               </div>
             </div>
           </CardContent>
-        </Card>
+          </Card>
+
+          {showDecoderPanel && (
+            <div className="xl:sticky xl:top-6">
+              <DecoderPanel
+                symbolMap={decoderMap}
+                encryptedPattern={puzzle.encryptedPattern}
+                isLoading={symbolMapLoading}
+              />
+            </div>
+          )}
+        </div>
 
         {/* Book Reference */}
         {(puzzle.bookChapter || puzzle.bookSection) && (

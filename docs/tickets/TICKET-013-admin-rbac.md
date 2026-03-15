@@ -5,179 +5,150 @@
 - **Priority:** P2
 - **Type:** bug
 - **Area:** multi-area
-- **Status:** open
+- **Status:** done
 - **Dependencies:** none
 
 ---
 
 ## Problem
-Several sensitive API endpoints are accessible to any authenticated user, not just admins:
-- `POST /api/puzzles` — any logged-in user can create puzzles
-- `PATCH /api/puzzles/:id` — any logged-in user can edit any puzzle
-- `DELETE /api/puzzles/:id` — any logged-in user can delete any puzzle
-- `POST /api/achievements` — any logged-in user can create achievements
-- `POST /api/achievements/seed` — **public endpoint** — anyone (even unauthenticated) can trigger achievement seeding
+Several sensitive API endpoints were accessible to any authenticated user, not just admins:
+- `POST /api/puzzles` - any logged-in user could create puzzles
+- `PATCH /api/puzzles/:id` - any logged-in user could edit any puzzle
+- `DELETE /api/puzzles/:id` - any logged-in user could delete any puzzle
+- `POST /api/achievements` - any logged-in user could create achievements
+- `POST /api/achievements/seed` - the endpoint was publicly callable
 
-This means any user who discovers the API can corrupt the game database: delete all puzzles, overwrite achievement criteria, or spam-seed achievements.
+This meant any user who discovered the API could corrupt core game content.
 
 ---
 
 ## Why This Matters
-Data integrity of the puzzle and achievement content is critical. A single API call from any authenticated user can destroy all puzzle content. The public `/achievements/seed` endpoint is especially dangerous — it requires no authentication at all.
+Puzzle and achievement content are shared game data. Mutation endpoints must be admin-only or a regular user can delete puzzles, overwrite achievement criteria, or spam content seeding.
 
 ---
 
 ## Evidence
-- `backend/src/modules/puzzles/puzzles.controller.ts` — `@Post()`, `@Patch(':id')`, `@Delete(':id')` only require `JwtAuthGuard` (any authenticated user)
-- `backend/src/modules/achievements/achievements.controller.ts` — `@Post('seed')` has no guard (public), `@Post()` only requires `JwtAuthGuard`
-- `backend/prisma/schema.prisma` — `User` model has no `role` field
+- `backend/src/modules/puzzles/puzzles.controller.ts` exposed create/update/delete without admin role checks
+- `backend/src/modules/achievements/achievements.controller.ts` exposed `POST /seed` publicly and `POST /` to any authenticated user
+- `backend/prisma/schema.prisma` had no `role` field on `User`
 
 ---
 
 ## Scope
-
-### 1. Add `Role` enum and field to `User` in Prisma schema
-```prisma
-enum Role {
-  USER
-  ADMIN
-}
-
-model User {
-  // ...existing fields...
-  role  Role  @default(USER)
-}
-```
-Run: `npx prisma migrate dev --name add-user-role`
-
-### 2. Create `@Roles()` decorator
-New file: `backend/src/common/decorators/roles.decorator.ts`
-```typescript
-import { SetMetadata } from '@nestjs/common';
-export const ROLES_KEY = 'roles';
-export const Roles = (...roles: Role[]) => SetMetadata(ROLES_KEY, roles);
-```
-
-### 3. Create `RolesGuard`
-New file: `backend/src/common/guards/roles.guard.ts`
-```typescript
-@Injectable()
-export class RolesGuard implements CanActivate {
-  constructor(private reflector: Reflector) {}
-  canActivate(context: ExecutionContext): boolean {
-    const requiredRoles = this.reflector.getAllAndOverride<Role[]>(ROLES_KEY, [
-      context.getHandler(),
-      context.getClass(),
-    ]);
-    if (!requiredRoles) return true;
-    const { user } = context.switchToHttp().getRequest();
-    return requiredRoles.includes(user.role);
-  }
-}
-```
-
-Register `RolesGuard` globally in `AppModule` (after `JwtAuthGuard`).
-
-### 4. Apply to sensitive endpoints
-```typescript
-// puzzles.controller.ts
-@Post()
-@UseGuards(JwtAuthGuard, RolesGuard)
-@Roles(Role.ADMIN)
-async createPuzzle(...) {}
-
-@Patch(':id')
-@UseGuards(JwtAuthGuard, RolesGuard)
-@Roles(Role.ADMIN)
-async updatePuzzle(...) {}
-
-@Delete(':id')
-@UseGuards(JwtAuthGuard, RolesGuard)
-@Roles(Role.ADMIN)
-async deletePuzzle(...) {}
-
-// achievements.controller.ts
-@Post('seed')
-@UseGuards(JwtAuthGuard, RolesGuard)
-@Roles(Role.ADMIN)
-async seedAchievements(...) {}
-
-@Post()
-@UseGuards(JwtAuthGuard, RolesGuard)
-@Roles(Role.ADMIN)
-async createAchievement(...) {}
-```
-
-### 5. Update JWT payload and strategy
-The JWT token payload should include the user's `role`. Update `auth.service.ts` where tokens are generated to include `role: user.role`. Update `jwt.strategy.ts` to include `role` in the returned user object.
-
-### 6. Seed an admin user
-In `prisma/seed.ts`, add a seeded admin account:
-```typescript
-await prisma.user.upsert({
-  where: { email: 'admin@codeoflife.dev' },
-  update: {},
-  create: {
-    email: 'admin@codeoflife.dev',
-    username: 'admin',
-    password: await bcrypt.hash(process.env.ADMIN_PASSWORD || 'admin123', 12),
-    role: 'ADMIN',
-  },
-});
-```
+1. Add a Prisma `Role` enum and `User.role`
+2. Add `@Roles()` metadata and a `RolesGuard`
+3. Add role data to JWT generation and authenticated request user objects
+4. Protect puzzle and achievement mutation endpoints with admin-only RBAC
+5. Seed a default admin account for development
 
 ---
 
 ## Out of Scope
-- Frontend admin panel (out of scope for this game version)
-- Role-based UI changes
-- Permission levels beyond USER and ADMIN
+- Frontend admin UI
+- Additional permission tiers beyond `USER` and `ADMIN`
+- Role-based UX changes
 
 ---
 
 ## Implementation Notes
-- The `JwtStrategy` must include `role` in the payload so `RolesGuard` can read it from `request.user`
-- `GET /api/puzzles` (list), `GET /api/puzzles/:id` (read) remain public — only mutations are protected
-- The `@Public()` decorator should override `RolesGuard` the same way it overrides `JwtAuthGuard`
+- Added `Role { USER, ADMIN }` to Prisma and `User.role @default(USER)`
+- Generated and applied migration `20260314234328_add_user_role`
+- Added `backend/src/common/decorators/roles.decorator.ts`
+- Added `backend/src/common/guards/roles.guard.ts`
+- `RolesGuard` supports `@Public()` and throws `ForbiddenException` when a required role is missing
+- Updated `AuthService.generateTokens()` to include `role` in both access and refresh token payloads
+- Updated `JwtStrategy` to select `role` from the database and return it on `request.user`
+- Protected these endpoints with `@Roles(Role.ADMIN)`:
+  - `POST /api/puzzles`
+  - `PATCH /api/puzzles/:id`
+  - `DELETE /api/puzzles/:id`
+  - `POST /api/achievements`
+  - `POST /api/achievements/seed`
+- Used route-level `JwtAuthGuard` + `RolesGuard` on the protected handlers instead of a global `APP_GUARD` registration so guard order stays explicit and existing public routes remain unchanged
+- Updated `prisma/seed.ts` to upsert `admin@codeoflife.dev` with `role=ADMIN` and password from `ADMIN_PASSWORD` or fallback `admin123`
+- Correction to the original ticket wording:
+  - unauthenticated admin-route access now returns `401`, not `403`, because `JwtAuthGuard` intentionally runs before `RolesGuard`
 
 ---
 
 ## Acceptance Criteria
-- [ ] `POST /api/puzzles` returns 403 for non-admin authenticated users
-- [ ] `PATCH /api/puzzles/:id` returns 403 for non-admin authenticated users
-- [ ] `DELETE /api/puzzles/:id` returns 403 for non-admin authenticated users
-- [ ] `POST /api/achievements/seed` returns 403 for unauthenticated requests
-- [ ] `POST /api/achievements/seed` returns 403 for non-admin authenticated users
-- [ ] Admin user seeded in `seed.ts` can successfully call all protected endpoints
-- [ ] Regular user cannot call any mutation endpoints
+- [x] `POST /api/puzzles` returns 403 for non-admin authenticated users
+- [x] `PATCH /api/puzzles/:id` returns 403 for non-admin authenticated users
+- [x] `DELETE /api/puzzles/:id` returns 403 for non-admin authenticated users
+- [x] `POST /api/achievements/seed` rejects unauthenticated requests (`401` from `JwtAuthGuard` before role evaluation)
+- [x] `POST /api/achievements/seed` returns 403 for non-admin authenticated users
+- [x] Admin user seeded in `seed.ts` can be created/upserted successfully
+- [x] Regular user cannot call the protected mutation endpoints
 
 ---
 
 ## Testing Requirements
-- **Unit test `RolesGuard`:** Test with ADMIN role (passes), USER role (blocked), no role in token (blocked)
-- **Integration test:** Register a regular user → attempt `POST /api/puzzles` → verify 403
-- **Integration test:** Use admin JWT → `POST /api/puzzles` → verify 201
+- **Automated coverage added:**
+  1. `RolesGuard` unit tests for ADMIN pass, USER blocked, missing role blocked, and public-route bypass
+  2. Puzzle mutation HTTP tests for non-admin `403` and admin success
+  3. Achievement mutation HTTP tests for unauthenticated `401`, non-admin `403`, and admin success
 
 ---
 
 ## Affected Areas
 - `backend/prisma/schema.prisma`
-- `backend/src/modules/auth/auth.service.ts` (add role to JWT payload)
-- `backend/src/modules/auth/jwt.strategy.ts` (include role in user object)
-- New: `backend/src/common/decorators/roles.decorator.ts`
-- New: `backend/src/common/guards/roles.guard.ts`
-- `backend/src/modules/puzzles/puzzles.controller.ts`
-- `backend/src/modules/achievements/achievements.controller.ts`
+- `backend/prisma/migrations/20260314234328_add_user_role/migration.sql`
 - `backend/prisma/seed.ts`
-- `backend/src/app.module.ts` (register RolesGuard globally)
+- `backend/src/common/decorators/index.ts`
+- `backend/src/common/decorators/roles.decorator.ts`
+- `backend/src/common/guards/index.ts`
+- `backend/src/common/guards/roles.guard.ts`
+- `backend/src/common/guards/roles.guard.spec.ts`
+- `backend/src/modules/auth/auth.service.ts`
+- `backend/src/modules/auth/jwt.strategy.ts`
+- `backend/src/modules/puzzles/puzzles.controller.ts`
+- `backend/src/modules/puzzles/puzzles.controller.rbac.spec.ts`
+- `backend/src/modules/achievements/achievements.controller.ts`
+- `backend/src/modules/achievements/achievements.controller.rbac.spec.ts`
 
 ---
 
 ## Risks / Edge Cases
-- Existing JWT tokens in the wild won't have the `role` field — these tokens will fail `RolesGuard` because `user.role` will be `undefined`. Since this is a dev environment with no production users, this is acceptable. Add `role: user.role ?? Role.USER` as fallback in the JWT strategy.
-- The admin password should come from an env var, not be hardcoded
+- Existing tokens issued before this change may not contain `role`, but `JwtStrategy` now reads the persisted user role from the database and falls back to `payload.role ?? Role.USER`
+- The default admin seed password is intentionally development-only and should be overridden with `ADMIN_PASSWORD`
 
 ---
 
 ## Open Questions
 None.
+
+---
+
+## Files Changed
+- `backend/prisma/schema.prisma`
+- `backend/prisma/migrations/20260314234328_add_user_role/migration.sql`
+- `backend/prisma/seed.ts`
+- `backend/src/common/decorators/index.ts`
+- `backend/src/common/decorators/roles.decorator.ts`
+- `backend/src/common/guards/index.ts`
+- `backend/src/common/guards/roles.guard.ts`
+- `backend/src/common/guards/roles.guard.spec.ts`
+- `backend/src/modules/auth/auth.service.ts`
+- `backend/src/modules/auth/jwt.strategy.ts`
+- `backend/src/modules/puzzles/puzzles.controller.ts`
+- `backend/src/modules/puzzles/puzzles.controller.rbac.spec.ts`
+- `backend/src/modules/achievements/achievements.controller.ts`
+- `backend/src/modules/achievements/achievements.controller.rbac.spec.ts`
+- `docs/tickets/TICKET-013-admin-rbac.md`
+- `docs/tickets/README.md`
+
+---
+
+## Validation Performed
+- `backend`: `npx prisma migrate dev --name add-user-role`
+- `backend`: `npx eslint -- "src/common/decorators/roles.decorator.ts" "src/common/decorators/index.ts" "src/common/guards/index.ts" "src/common/guards/roles.guard.ts" "src/common/guards/roles.guard.spec.ts" "src/modules/auth/auth.service.ts" "src/modules/auth/jwt.strategy.ts" "src/modules/puzzles/puzzles.controller.ts" "src/modules/puzzles/puzzles.controller.rbac.spec.ts" "src/modules/achievements/achievements.controller.ts" "src/modules/achievements/achievements.controller.rbac.spec.ts" "prisma/seed.ts"`
+- `backend`: `npm run test -- roles.guard.spec.ts puzzles.controller.rbac.spec.ts achievements.controller.rbac.spec.ts`
+- `backend`: `npm run test`
+- `backend`: `npm run build`
+- `backend`: `npx prisma db seed`
+
+---
+
+## Follow-up Notes
+- Completed: 2026-03-15.
+- `npm run test` passes, but the existing battle gateway specs still emit expected mocked error logs and Jest reports a long-standing worker shutdown warning unrelated to this ticket.

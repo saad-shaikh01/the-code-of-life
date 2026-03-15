@@ -22,10 +22,10 @@ import {
 } from './achievements.service';
 import { createAchievementSchema } from '@code-of-life/shared';
 import { ApiResponseDto } from '../../common/dto';
-import { JwtAuthGuard } from '../../common/guards';
-import { CurrentUser } from '../../common/decorators';
+import { JwtAuthGuard, RolesGuard } from '../../common/guards';
+import { CurrentUser, Roles } from '../../common/decorators';
 import { Public } from '../../common/decorators/public.decorator';
-import { Achievement, UserAchievement } from '@prisma/client';
+import { Achievement, Role, UserAchievement } from '@prisma/client';
 
 // DTOs for Swagger
 class CreateAchievementDto extends createZodDto(createAchievementSchema) {}
@@ -48,12 +48,16 @@ export class AchievementsController {
   @Get('user')
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Get all achievements with user unlock status' })
-  @ApiResponse({ status: 200, description: 'Returns achievements with unlock status' })
+  @ApiResponse({
+    status: 200,
+    description: 'Returns achievements with unlock status',
+  })
   @ApiResponse({ status: 401, description: 'Unauthorized' })
   async getUserAchievements(
     @CurrentUser('id') userId: string,
   ): Promise<ApiResponseDto<AchievementWithUnlock[]>> {
-    const achievements = await this.achievementsService.getUserAchievements(userId);
+    const achievements =
+      await this.achievementsService.getUserAchievements(userId);
     return ApiResponseDto.success(achievements);
   }
 
@@ -65,7 +69,8 @@ export class AchievementsController {
   async getUnlockedAchievements(
     @CurrentUser('id') userId: string,
   ): Promise<ApiResponseDto<UserAchievement[]>> {
-    const achievements = await this.achievementsService.getUnlockedAchievements(userId);
+    const achievements =
+      await this.achievementsService.getUnlockedAchievements(userId);
     return ApiResponseDto.success(achievements);
   }
 
@@ -73,12 +78,16 @@ export class AchievementsController {
   @HttpCode(HttpStatus.OK)
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Check and unlock new achievements' })
-  @ApiResponse({ status: 200, description: 'Returns newly unlocked achievements' })
+  @ApiResponse({
+    status: 200,
+    description: 'Returns newly unlocked achievements',
+  })
   @ApiResponse({ status: 401, description: 'Unauthorized' })
   async checkAchievements(
     @CurrentUser('id') userId: string,
   ): Promise<ApiResponseDto<Achievement[]>> {
-    const unlocked = await this.achievementsService.checkAndUnlockAchievements(userId);
+    const unlocked =
+      await this.achievementsService.checkAndUnlockAchievements(userId);
     const message =
       unlocked.length > 0
         ? `Unlocked ${unlocked.length} new achievement(s)!`
@@ -109,7 +118,9 @@ export class AchievementsController {
   async getAchievementProgress(
     @CurrentUser('id') userId: string,
     @Param('id') achievementId: string,
-  ): Promise<ApiResponseDto<{ current: number; target: number; percentage: number }>> {
+  ): Promise<
+    ApiResponseDto<{ current: number; target: number; percentage: number }>
+  > {
     const progress = await this.achievementsService.getAchievementProgress(
       userId,
       achievementId,
@@ -118,12 +129,17 @@ export class AchievementsController {
   }
 
   @Post('seed')
-  @Public()
+  @UseGuards(RolesGuard)
+  @Roles(Role.ADMIN)
   @HttpCode(HttpStatus.CREATED)
+  @ApiBearerAuth()
   @ApiOperation({ summary: 'Seed default achievements (admin)' })
   @ApiResponse({ status: 201, description: 'Default achievements created' })
+  @ApiResponse({ status: 401, description: 'Unauthorized' })
+  @ApiResponse({ status: 403, description: 'Admin access required' })
   async seedAchievements(): Promise<ApiResponseDto<Achievement[]>> {
-    const achievements = await this.achievementsService.seedDefaultAchievements();
+    const achievements =
+      await this.achievementsService.seedDefaultAchievements();
     return ApiResponseDto.success(
       achievements,
       `Created ${achievements.length} achievements`,
@@ -131,17 +147,23 @@ export class AchievementsController {
   }
 
   @Post()
+  @UseGuards(RolesGuard)
+  @Roles(Role.ADMIN)
   @ApiBearerAuth()
   @HttpCode(HttpStatus.CREATED)
   @ApiOperation({ summary: 'Create a new achievement (admin)' })
   @ApiResponse({ status: 201, description: 'Achievement created' })
+  @ApiResponse({ status: 401, description: 'Unauthorized' })
+  @ApiResponse({ status: 403, description: 'Admin access required' })
   @ApiResponse({ status: 409, description: 'Achievement name already exists' })
   async createAchievement(
     @Body() createAchievementDto: CreateAchievementDto,
   ): Promise<ApiResponseDto<Achievement>> {
-    const achievement = await this.achievementsService.createAchievement(
-      createAchievementDto,
+    const achievement =
+      await this.achievementsService.createAchievement(createAchievementDto);
+    return ApiResponseDto.success(
+      achievement,
+      'Achievement created successfully',
     );
-    return ApiResponseDto.success(achievement, 'Achievement created successfully');
   }
 }

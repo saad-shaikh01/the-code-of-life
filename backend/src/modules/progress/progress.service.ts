@@ -1,7 +1,11 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import {
+  BadRequestException,
+  Injectable,
+  NotFoundException,
+} from '@nestjs/common';
 import { PrismaService } from '../../prisma';
-import { SubmitProgressInput } from '@code-of-life/shared';
-import { UserProgress, Puzzle } from '@prisma/client';
+import { HINTS_PER_PUZZLE, SubmitProgressInput } from '@code-of-life/shared';
+import { Difficulty, UserProgress, Puzzle } from '@prisma/client';
 import { UsersService } from '../users';
 
 export interface ProgressWithPuzzle extends UserProgress {
@@ -15,6 +19,13 @@ export interface GameModeProgress {
   averageTime: number;
 }
 
+const GROWTH_POINTS_BY_DIFFICULTY: Record<Difficulty, number> = {
+  BEGINNER: 10,
+  INTERMEDIATE: 20,
+  ADVANCED: 30,
+  MASTER: 30,
+};
+
 @Injectable()
 export class ProgressService {
   constructor(
@@ -26,6 +37,8 @@ export class ProgressService {
     userId: string,
     input: SubmitProgressInput,
   ): Promise<UserProgress> {
+    this.validateHintsUsed(input.hintsUsed);
+
     // Verify puzzle exists
     const puzzle = await this.prisma.puzzle.findUnique({
       where: { id: input.puzzleId },
@@ -56,7 +69,10 @@ export class ProgressService {
           where: { id: existingProgress.id },
           data: {
             completed: input.completed || existingProgress.completed,
-            completedAt: input.completed && !existingProgress.completed ? new Date() : existingProgress.completedAt,
+            completedAt:
+              input.completed && !existingProgress.completed
+                ? new Date()
+                : existingProgress.completedAt,
             score: Math.max(input.score, existingProgress.score),
             timeSpent: input.timeSpent,
             hintsUsed: Math.min(input.hintsUsed, existingProgress.hintsUsed),
@@ -65,7 +81,7 @@ export class ProgressService {
 
         // Update user stats if completing for first time
         if (input.completed && !existingProgress.completed) {
-          await this.updateUserStats(userId, input.score);
+          await this.updateUserStats(userId, input.score, puzzle.difficulty);
         }
 
         return updatedProgress;
@@ -89,13 +105,17 @@ export class ProgressService {
 
     // Update user stats if completed
     if (input.completed) {
-      await this.updateUserStats(userId, input.score);
+      await this.updateUserStats(userId, input.score, puzzle.difficulty);
     }
 
     return progress;
   }
 
-  private async updateUserStats(userId: string, score: number): Promise<void> {
+  private async updateUserStats(
+    userId: string,
+    score: number,
+    difficulty?: Difficulty,
+  ): Promise<void> {
     const user = await this.prisma.user.findUnique({
       where: { id: userId },
       select: {
@@ -122,7 +142,35 @@ export class ProgressService {
       },
     });
 
+    await this.usersService.updateGrowth(
+      userId,
+      this.getGrowthPointsForDifficulty(difficulty),
+    );
     await this.usersService.updateStreak(userId);
+  }
+
+  private getGrowthPointsForDifficulty(difficulty?: Difficulty): number {
+    if (!difficulty) {
+      return 10;
+    }
+
+    return GROWTH_POINTS_BY_DIFFICULTY[difficulty] ?? 10;
+  }
+
+  private validateHintsUsed(hintsUsed: number): void {
+    if (!Number.isInteger(hintsUsed)) {
+      throw new BadRequestException('hintsUsed must be an integer');
+    }
+
+    if (hintsUsed < 0) {
+      throw new BadRequestException('hintsUsed cannot be negative');
+    }
+
+    if (hintsUsed > HINTS_PER_PUZZLE) {
+      throw new BadRequestException(
+        `hintsUsed cannot exceed ${HINTS_PER_PUZZLE}`,
+      );
+    }
   }
 
   async getUserProgress(userId: string): Promise<ProgressWithPuzzle[]> {
@@ -173,7 +221,8 @@ export class ProgressService {
       total: puzzles.length,
       completed: completed.length,
       totalScore,
-      averageTime: completed.length > 0 ? Math.round(totalTime / completed.length) : 0,
+      averageTime:
+        completed.length > 0 ? Math.round(totalTime / completed.length) : 0,
     };
   }
 
@@ -203,6 +252,8 @@ export class ProgressService {
           totalScore: 0,
           currentLevel: 1,
           streakDays: 0,
+          growthPoints: 0,
+          growthStage: 1,
         },
       });
     }

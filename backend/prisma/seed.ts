@@ -1,4 +1,5 @@
-import { PrismaClient, GameMode, Difficulty } from '@prisma/client';
+import { PrismaClient, GameMode, Difficulty, Role } from '@prisma/client';
+import * as bcrypt from 'bcrypt';
 import { encodeCipherText } from '@code-of-life/shared';
 
 const prisma = new PrismaClient();
@@ -257,6 +258,22 @@ const puzzles: PuzzleSeed[] = [
 async function main() {
   console.log('Starting seed...');
 
+  const adminPassword = process.env.ADMIN_PASSWORD || 'admin123';
+
+  await prisma.user.upsert({
+    where: { email: 'admin@codeoflife.dev' },
+    update: {
+      role: Role.ADMIN,
+    },
+    create: {
+      email: 'admin@codeoflife.dev',
+      username: 'admin',
+      password: await bcrypt.hash(adminPassword, 12),
+      role: Role.ADMIN,
+    },
+  });
+  console.log('Seeded admin user: admin@codeoflife.dev');
+
   // Reset progress first because it depends on seeded puzzle rows.
   await prisma.userProgress.deleteMany();
   await prisma.puzzle.deleteMany();
@@ -311,7 +328,10 @@ async function main() {
     ({ encryptedPattern }) => !/^[0-9 ]+$/.test(encryptedPattern),
   );
 
-  if (persistedPuzzles.length !== puzzles.length || invalidPatterns.length > 0) {
+  if (
+    persistedPuzzles.length !== puzzles.length ||
+    invalidPatterns.length > 0
+  ) {
     throw new Error(
       `Seed verification failed. Expected ${puzzles.length} numeric patterns, found ${persistedPuzzles.length} rows and ${invalidPatterns.length} invalid patterns.`,
     );

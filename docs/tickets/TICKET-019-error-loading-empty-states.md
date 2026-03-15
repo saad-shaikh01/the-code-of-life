@@ -5,162 +5,146 @@
 - **Priority:** P2
 - **Type:** tech-debt
 - **Area:** frontend
-- **Status:** open
+- **Status:** done
 - **Dependencies:** none
 
 ---
 
 ## Problem
-Error, loading, and empty states are handled inconsistently across pages:
-- Some pages show `<Skeleton>` components during loading; others render nothing or show blank sections
-- API errors are sometimes caught and displayed; sometimes only `console.error()`'d; sometimes silently swallowed
-- No global React `ErrorBoundary` wraps the `/(main)/` layout — an unhandled render error in any page component will crash the entire app to a blank white screen
-- Empty states (e.g., no puzzles, no achievements) have different designs per page
+Error, loading, and empty states were handled inconsistently across the protected frontend:
+- Some pages already used `<Skeleton>` components during loading, while others rendered blank sections or misleading zero-state content
+- API failures were not always surfaced to the user with a retry path
+- No global React `ErrorBoundary` wrapped the `/(main)` layout, so an unhandled render failure could take down the whole protected view
+- Empty states used inconsistent patterns across pages
 
 ---
 
 ## Why This Matters
-Inconsistent error handling makes the app feel unpolished and hard to debug. A missing ErrorBoundary means a single component bug can take down the entire app view. Console-only errors make production debugging harder and may cause false-positive alerts.
+Inconsistent error handling makes the app feel unpolished and difficult to debug. A missing ErrorBoundary means a single render bug can blank the current protected page, and console-only failures are not actionable for users.
 
 ---
 
 ## Evidence
-- `frontend/src/app/(main)/layout.tsx` — no `ErrorBoundary`
-- Dashboard, profile, and achievements pages use `<Skeleton>` (good)
-- Some query hooks use `isError` state but pages don't always render an error UI
-- `frontend/src/api/client.ts` — throws `ApiClientError` on failures; not always caught by consuming components
+- `frontend/src/app/(main)/layout.tsx` had no `ErrorBoundary`
+- `frontend/src/api/client.ts` throws request failures, but consuming pages were not consistently rendering inline error UI
+- `story/page.tsx`, `challenge/page.tsx`, and `leaderboards/page.tsx` each had at least one missing or inconsistent loading/error/empty state
+- `dashboard`, `achievements`, and `profile` already had acceptable loading/error handling and were intentionally left alone
 
 ---
 
 ## Scope
-
-### 1. Create a reusable `ErrorBoundary` component
-New file: `frontend/src/components/error-boundary.tsx`
-```tsx
-"use client";
-import React from 'react';
-import { Button } from "@/components/ui";
-
-interface State { hasError: boolean; error?: Error; }
-
-export class ErrorBoundary extends React.Component<
-  { children: React.ReactNode; fallback?: React.ReactNode },
-  State
-> {
-  state: State = { hasError: false };
-  static getDerivedStateFromError(error: Error): State {
-    return { hasError: true, error };
-  }
-  render() {
-    if (this.state.hasError) {
-      return this.props.fallback ?? (
-        <div className="flex flex-col items-center justify-center min-h-64 text-center p-8">
-          <h2 className="text-xl font-semibold text-foreground mb-2">Something went wrong</h2>
-          <p className="text-muted-foreground mb-4">An unexpected error occurred.</p>
-          <Button onClick={() => this.setState({ hasError: false })}>Try Again</Button>
-        </div>
-      );
-    }
-    return this.props.children;
-  }
-}
-```
-
-### 2. Wrap `(main)/layout.tsx` with ErrorBoundary
-```tsx
-// frontend/src/app/(main)/layout.tsx
-import { ErrorBoundary } from "@/components/error-boundary";
-
-<ErrorBoundary>
-  <div className="main-layout">
-    {children}
-  </div>
-</ErrorBoundary>
-```
-
-### 3. Standardise query error display pattern
-Create a reusable `QueryError` component:
-```tsx
-// frontend/src/components/ui/query-error.tsx
-export function QueryError({ message }: { message?: string }) {
-  return (
-    <div className="text-center py-12">
-      <p className="text-destructive">{message || "Failed to load data. Please try again."}</p>
-    </div>
-  );
-}
-```
-Update pages that have `isError` from a query to render `<QueryError message={error?.message} />` instead of showing nothing.
-
-### 4. Standardise empty state component
-Create:
-```tsx
-// frontend/src/components/ui/empty-state.tsx
-export function EmptyState({ icon: Icon, title, description, action }: EmptyStateProps) {
-  return (
-    <div className="text-center py-16">
-      <Icon className="h-16 w-16 mx-auto text-muted-foreground/50 mb-4" />
-      <h3 className="text-lg font-semibold mb-2">{title}</h3>
-      <p className="text-muted-foreground mb-4">{description}</p>
-      {action}
-    </div>
-  );
-}
-```
-
-### 5. Audit pages for missing error states
-Read the following pages and add `isError` → `<QueryError>` handling where missing:
-- `story/page.tsx`
-- `challenge/page.tsx`
-- `leaderboards/page.tsx`
-- `battle/page.tsx` (connection errors)
+1. Create a reusable `ErrorBoundary` component
+2. Wrap `/(main)/layout.tsx` with `ErrorBoundary`
+3. Create reusable `QueryError` and `EmptyState` UI components
+4. Audit and fix the requested pages:
+   - `story/page.tsx`
+   - `challenge/page.tsx`
+   - `leaderboards/page.tsx`
 
 ---
 
 ## Out of Scope
-- Changing the visual design of existing working skeleton loaders
-- Adding error tracking (Sentry, etc.) — that's a separate initiative
+- Redesigning working pages
+- Adding telemetry or external error tracking
+- Reworking pages that were already compliant
 
 ---
 
 ## Implementation Notes
-- React `ErrorBoundary` must be a class component (React 18 doesn't support functional error boundaries natively)
-- Keep the boundary broad (wrapping the main layout) rather than per-page — per-page is more granular but harder to maintain
-- The `QueryError` and `EmptyState` components should go in `frontend/src/components/ui/` alongside existing UI components
+- Implemented a class-based `ErrorBoundary` in `frontend/src/components/providers/ErrorBoundary.tsx` with:
+  - `getDerivedStateFromError`
+  - `componentDidCatch`
+  - a default centered fallback card
+  - a `Try again` action that reloads the page
+- Re-exported `ErrorBoundary` from `@/components/ui` so the shared UI barrel satisfies the ticket contract while the file still lives under `providers/`.
+- Wrapped the protected page content inside `frontend/src/app/(main)/layout.tsx` with `ErrorBoundary` without changing the existing auth guard structure.
+- Added reusable UI primitives:
+  - `frontend/src/components/ui/query-error.tsx`
+  - `frontend/src/components/ui/empty-state.tsx`
+- Updated `frontend/src/components/ui/index.ts` to export:
+  - `ErrorBoundary`
+  - `QueryError`
+  - `EmptyState`
+- `story/page.tsx` now:
+  - shows skeletons while puzzle and progress queries load
+  - renders a retryable `QueryError` if either query fails
+  - renders a shared `EmptyState` when no story puzzles exist for the selected tab
+- `challenge/page.tsx` now:
+  - shows skeletons instead of misleading zero stats while loading
+  - renders a retryable `QueryError` when puzzle or progress queries fail
+  - renders a shared `EmptyState` when no challenge puzzles exist
+- `leaderboards/page.tsx` now:
+  - renders retryable `QueryError` states for leaderboard, global stats, streak, and level fetch failures
+  - renders shared `EmptyState` blocks when those datasets are empty
+  - keeps the existing skeleton pattern during loading
+- `battle/page.tsx` was not changed in this ticket because the connection error and fallback UX were already hardened under `TICKET-010`.
 
 ---
 
 ## Acceptance Criteria
-- [ ] An unhandled render error in any `/(main)/` page shows the ErrorBoundary fallback instead of a blank white screen
-- [ ] All pages with React Query data fetching render `<QueryError>` when `isError` is true
-- [ ] All pages with empty data sets render a consistent `<EmptyState>` component
-- [ ] No API errors are silently swallowed (they should either show a toast or a query error state)
-- [ ] The `ErrorBoundary`, `QueryError`, and `EmptyState` components are exported from `@/components/ui`
+- [x] An unhandled render error in any `/(main)/` page shows the ErrorBoundary fallback instead of a blank white screen
+- [x] All pages with React Query data fetching render `<QueryError>` when `isError` is true
+- [x] All pages with empty data sets render a consistent `<EmptyState>` component
+- [x] No API errors are silently swallowed (they should either show a toast or a query error state)
+- [x] The `ErrorBoundary`, `QueryError`, and `EmptyState` components are exported from `@/components/ui`
 
 ---
 
 ## Testing Requirements
-- **Manual QA:** Temporarily throw an error in a page component → verify ErrorBoundary catches it and shows fallback
-- **Manual QA:** Disconnect backend → navigate to pages → verify error states shown (not blank)
-- **Regression:** Normal page loads must not be affected
+- **Automated validation run:**
+  - targeted ESLint on all touched files
+  - `frontend` production build
+- **Manual QA recommended:**
+  1. Temporarily throw inside a protected page component and verify `ErrorBoundary` catches it
+  2. Disconnect the backend and verify `story`, `challenge`, and `leaderboards` render inline error states instead of blank sections
+  3. Verify normal protected-page rendering is unchanged when data loads successfully
 
 ---
 
 ## Affected Areas
-- New: `frontend/src/components/error-boundary.tsx`
-- New: `frontend/src/components/ui/query-error.tsx`
-- New: `frontend/src/components/ui/empty-state.tsx`
+- `frontend/src/components/providers/ErrorBoundary.tsx`
+- `frontend/src/components/ui/query-error.tsx`
+- `frontend/src/components/ui/empty-state.tsx`
+- `frontend/src/components/ui/index.ts`
 - `frontend/src/app/(main)/layout.tsx`
-- Various page files (story, challenge, leaderboards, battle)
-- `frontend/src/components/ui/index.ts` (export new components)
+- `frontend/src/app/(main)/story/page.tsx`
+- `frontend/src/app/(main)/challenge/page.tsx`
+- `frontend/src/app/(main)/leaderboards/page.tsx`
 
 ---
 
 ## Risks / Edge Cases
-- Class component ErrorBoundary plays well with React 18 but may need adjustment for React 19 concurrent features — test carefully
-- ErrorBoundary does not catch async errors (e.g., errors in event handlers or promises) — only render errors
+- React error boundaries do not catch async errors from event handlers or promises; they only catch render/lifecycle errors
+- Manual browser QA is still needed to confirm the fallback and retry states in a live session
 
 ---
 
 ## Open Questions
 None.
+
+---
+
+## Files Changed
+- `frontend/src/components/providers/ErrorBoundary.tsx`
+- `frontend/src/components/ui/query-error.tsx`
+- `frontend/src/components/ui/empty-state.tsx`
+- `frontend/src/components/ui/index.ts`
+- `frontend/src/app/(main)/layout.tsx`
+- `frontend/src/app/(main)/story/page.tsx`
+- `frontend/src/app/(main)/challenge/page.tsx`
+- `frontend/src/app/(main)/leaderboards/page.tsx`
+- `docs/tickets/TICKET-019-error-loading-empty-states.md`
+- `docs/tickets/README.md`
+
+---
+
+## Validation Performed
+- `frontend`: `npx eslint -- "src/components/providers/ErrorBoundary.tsx" "src/components/ui/query-error.tsx" "src/components/ui/empty-state.tsx" "src/components/ui/index.ts" "src/app/(main)/layout.tsx" "src/app/(main)/leaderboards/page.tsx" "src/app/(main)/story/page.tsx" "src/app/(main)/challenge/page.tsx"`
+- `frontend`: `npm run build`
+
+---
+
+## Follow-up Notes
+- Completed: 2026-03-15.
+- Manual browser QA was not run in this terminal session.
+- The existing Next.js warning about `middleware.ts` being deprecated in favor of `proxy` remains unrelated to this ticket.

@@ -7,12 +7,22 @@ import { motion } from "framer-motion";
 import { Mail, Lock, Eye, EyeOff } from "lucide-react";
 import { useAuthStore } from "@/stores";
 import { useToast } from "@/components/ui/toast";
-import { Button, Input, Card, CardHeader, CardTitle, CardDescription, CardContent, CardFooter } from "@/components/ui";
+import {
+  Button,
+  Input,
+  Card,
+  CardHeader,
+  CardTitle,
+  CardDescription,
+  CardContent,
+  CardFooter,
+} from "@/components/ui";
 import { cn } from "@/lib/utils";
 
 export default function LoginPage() {
   const router = useRouter();
-  const { login, isLoading, error, clearError, isAuthenticated, user } = useAuthStore();
+  const { login, isLoading, error, clearError, isAuthenticated, user } =
+    useAuthStore();
   const { addToast } = useToast();
 
   const [email, setEmail] = React.useState("");
@@ -30,7 +40,7 @@ export default function LoginPage() {
 
   React.useEffect(() => {
     if (isAuthenticated && user) {
-      router.push('/dashboard');
+      router.push("/dashboard");
     }
   }, [isAuthenticated, user, router]);
 
@@ -57,7 +67,7 @@ export default function LoginPage() {
     if (!validateForm()) return;
 
     try {
-      await login({ email, password });
+      await login({ email, password }, rememberMe);
       addToast({
         type: "success",
         title: "Welcome back!",
@@ -85,9 +95,7 @@ export default function LoginPage() {
           <span className="text-3xl animate-glow-pulse">☀</span>
         </motion.div>
         <CardTitle className="text-2xl">Welcome Back</CardTitle>
-        <CardDescription>
-          Sign in to continue your journey
-        </CardDescription>
+        <CardDescription>Sign in to continue your journey</CardDescription>
       </CardHeader>
 
       <CardContent>
@@ -136,7 +144,7 @@ export default function LoginPage() {
                 className={cn(
                   "h-4 w-4 rounded border-white/20 bg-white/5",
                   "checked:bg-amber-500 checked:border-amber-500",
-                  "focus:ring-2 focus:ring-amber-500/20 focus:ring-offset-0"
+                  "focus:ring-2 focus:ring-amber-500/20 focus:ring-offset-0",
                 )}
               />
               <span className="text-sm text-muted-foreground">Remember me</span>
@@ -160,11 +168,7 @@ export default function LoginPage() {
             </motion.div>
           )}
 
-          <Button
-            type="submit"
-            className="w-full"
-            isLoading={isLoading}
-          >
+          <Button type="submit" className="w-full" isLoading={isLoading}>
             Sign In
           </Button>
         </form>

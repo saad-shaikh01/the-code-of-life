@@ -2,7 +2,14 @@
 
 import Link from "next/link";
 import { motion } from "framer-motion";
-import { BookOpen, Swords, Calendar, Trophy, Star, ChevronRight, Sparkles } from "lucide-react";
+import {
+  BookOpen,
+  Swords,
+  Calendar,
+  Trophy,
+  Star,
+  ChevronRight,
+} from "lucide-react";
 import { LandingAuthActions } from "@/components/layout/landing-auth-actions";
 import { Button, Card } from "@/components/ui";
 import { cn } from "@/lib/utils";
@@ -11,7 +18,8 @@ const features = [
   {
     icon: BookOpen,
     title: "Story Mode",
-    description: "Journey through chapters of wisdom, unlocking lessons one puzzle at a time",
+    description:
+      "Journey through chapters of wisdom, unlocking lessons one puzzle at a time",
     color: "violet",
     href: "/story",
   },
@@ -64,7 +72,9 @@ export default function HomePage() {
           <div className="h-10 w-10 rounded-xl bg-gradient-to-br from-amber-500 to-amber-600 flex items-center justify-center shadow-lg shadow-amber-500/25">
             <span className="text-xl font-bold text-white">☀</span>
           </div>
-          <span className="font-bold text-xl text-gradient-gold">Code of Life</span>
+          <span className="font-bold text-xl text-gradient-gold">
+            Code of Life
+          </span>
         </div>
         <LandingAuthActions />
       </nav>
@@ -87,7 +97,7 @@ export default function HomePage() {
                 transition={{ delay: 0.2 + i * 0.1, type: "spring" }}
                 className={cn(
                   "text-4xl md:text-5xl animate-float",
-                  "symbol-gold"
+                  "symbol-gold",
                 )}
                 style={{ animationDelay: `${i * 0.5}s` }}
               >
@@ -103,18 +113,17 @@ export default function HomePage() {
           </h1>
 
           <p className="text-lg md:text-xl text-muted-foreground max-w-2xl mx-auto mb-10">
-            Embark on a mystical journey through ancient symbols and hidden messages.
-            Each puzzle reveals a timeless truth about life, love, and the human spirit.
+            Embark on a mystical journey through ancient symbols and hidden
+            messages. Each puzzle reveals a timeless truth about life, love, and
+            the human spirit.
           </p>
 
           <div className="flex flex-col sm:flex-row items-center justify-center gap-4">
-            <Link href="/register">
-              <Button size="lg" className="group">
-                <Sparkles className="h-5 w-5 mr-2" />
-                Start Your Journey
-                <ChevronRight className="h-5 w-5 ml-2 group-hover:translate-x-1 transition-transform" />
-              </Button>
-            </Link>
+            <LandingAuthActions
+              mode="single"
+              buttonSize="lg"
+              loggedOutLabel="Start Your Journey"
+            />
             <Link href="/daily">
               <Button variant="secondary" size="lg">
                 Try Today&apos;s Puzzle
@@ -133,20 +142,26 @@ export default function HomePage() {
           className="relative"
         >
           <Card variant="elevated" glow="gold" className="p-8 text-center">
-            <p className="text-sm text-muted-foreground mb-4">DECODE THIS MESSAGE</p>
+            <p className="text-sm text-muted-foreground mb-4">
+              DECODE THIS MESSAGE
+            </p>
             <div className="flex flex-wrap justify-center gap-3 text-4xl md:text-6xl font-mono mb-6">
-              {["☀", "★", "◆", " ", "☽", "✦", "☀", " ", "★", "◆", "☽"].map((char, i) => (
-                <motion.span
-                  key={i}
-                  initial={{ opacity: 0, scale: 0 }}
-                  whileInView={{ opacity: 1, scale: 1 }}
-                  viewport={{ once: true }}
-                  transition={{ delay: i * 0.05, type: "spring" }}
-                  className={char === " " ? "w-4" : "symbol-gold animate-glow-pulse"}
-                >
-                  {char}
-                </motion.span>
-              ))}
+              {["☀", "★", "◆", " ", "☽", "✦", "☀", " ", "★", "◆", "☽"].map(
+                (char, i) => (
+                  <motion.span
+                    key={i}
+                    initial={{ opacity: 0, scale: 0 }}
+                    whileInView={{ opacity: 1, scale: 1 }}
+                    viewport={{ once: true }}
+                    transition={{ delay: i * 0.05, type: "spring" }}
+                    className={
+                      char === " " ? "w-4" : "symbol-gold animate-glow-pulse"
+                    }
+                  >
+                    {char}
+                  </motion.span>
+                ),
+              )}
             </div>
             <p className="text-muted-foreground">
               Can you decipher the hidden message?
@@ -167,7 +182,8 @@ export default function HomePage() {
             Multiple Ways to Play
           </h2>
           <p className="text-muted-foreground max-w-2xl mx-auto">
-            Choose your path to wisdom with different game modes designed for every type of player
+            Choose your path to wisdom with different game modes designed for
+            every type of player
           </p>
         </motion.div>
 
@@ -191,10 +207,14 @@ export default function HomePage() {
                       <div
                         className={cn(
                           "p-3 rounded-xl",
-                          feature.color === "violet" && "bg-violet-500/20 text-violet-400",
-                          feature.color === "rose" && "bg-rose-500/20 text-rose-400",
-                          feature.color === "cyan" && "bg-cyan-500/20 text-cyan-400",
-                          feature.color === "amber" && "bg-amber-500/20 text-amber-400"
+                          feature.color === "violet" &&
+                            "bg-violet-500/20 text-violet-400",
+                          feature.color === "rose" &&
+                            "bg-rose-500/20 text-rose-400",
+                          feature.color === "cyan" &&
+                            "bg-cyan-500/20 text-cyan-400",
+                          feature.color === "amber" &&
+                            "bg-amber-500/20 text-amber-400",
                         )}
                       >
                         <Icon className="h-6 w-6" />
@@ -236,7 +256,9 @@ export default function HomePage() {
                 <span className="text-3xl md:text-4xl font-bold text-gradient-gold">
                   {stat.value}
                 </span>
-                {stat.icon && <Star className="h-6 w-6 text-amber-400 fill-amber-400" />}
+                {stat.icon && (
+                  <Star className="h-6 w-6 text-amber-400 fill-amber-400" />
+                )}
               </div>
               <p className="text-sm text-muted-foreground mt-1">{stat.label}</p>
             </Card>
@@ -256,14 +278,14 @@ export default function HomePage() {
               Ready to Begin?
             </h2>
             <p className="text-muted-foreground mb-8 max-w-lg mx-auto">
-              Join thousands of players unlocking ancient wisdom through the art of decoding symbols
+              Join thousands of players unlocking ancient wisdom through the art
+              of decoding symbols
             </p>
-            <Link href="/register">
-              <Button size="lg">
-                <Sparkles className="h-5 w-5 mr-2" />
-                Create Free Account
-              </Button>
-            </Link>
+            <LandingAuthActions
+              mode="single"
+              buttonSize="lg"
+              loggedOutLabel="Create Free Account"
+            />
           </Card>
         </motion.div>
       </section>
@@ -280,9 +302,24 @@ export default function HomePage() {
             </span>
           </div>
           <nav className="flex gap-6 text-sm text-muted-foreground">
-            <Link href="/about" className="hover:text-foreground transition-colors">About</Link>
-            <Link href="/privacy" className="hover:text-foreground transition-colors">Privacy</Link>
-            <Link href="/terms" className="hover:text-foreground transition-colors">Terms</Link>
+            <Link
+              href="/about"
+              className="hover:text-foreground transition-colors"
+            >
+              About
+            </Link>
+            <Link
+              href="/privacy"
+              className="hover:text-foreground transition-colors"
+            >
+              Privacy
+            </Link>
+            <Link
+              href="/terms"
+              className="hover:text-foreground transition-colors"
+            >
+              Terms
+            </Link>
           </nav>
         </div>
       </footer>

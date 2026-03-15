@@ -5,6 +5,7 @@ import {
   HttpCode,
   HttpStatus,
   Get,
+  Query,
   UseGuards,
 } from '@nestjs/common';
 import {
@@ -27,6 +28,7 @@ import {
   changePasswordSchema,
   forgotPasswordSchema,
   resetPasswordSchema,
+  verifyEmailSchema,
 } from '@code-of-life/shared';
 import { ApiResponseDto } from '../../common/dto';
 import { Public } from '../../common/decorators';
@@ -43,6 +45,7 @@ class RefreshTokenDto extends createZodDto(refreshTokenSchema) {}
 class ChangePasswordDto extends createZodDto(changePasswordSchema) {}
 class ForgotPasswordDto extends createZodDto(forgotPasswordSchema) {}
 class ResetPasswordDto extends createZodDto(resetPasswordSchema) {}
+class VerifyEmailDto extends createZodDto(verifyEmailSchema) {}
 
 @ApiTags('auth')
 @Controller('auth')
@@ -98,8 +101,7 @@ export class AuthController {
   @ApiOperation({ summary: 'Request a password reset token' })
   @ApiResponse({
     status: 200,
-    description:
-      'Returns a generic success response and includes the reset token in dev mode',
+    description: 'Returns a generic success response if the email exists',
   })
   async forgotPassword(
     @Body() forgotPasswordDto: ForgotPasswordDto,
@@ -109,6 +111,42 @@ export class AuthController {
       result,
       'If an account exists with that email, a reset link has been generated.',
     );
+  }
+
+  @Get('verify-email')
+  @Public()
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: 'Verify email address using a valid token' })
+  @ApiResponse({ status: 200, description: 'Email verified successfully' })
+  @ApiResponse({
+    status: 400,
+    description: 'Invalid or expired verification token',
+  })
+  async verifyEmail(
+    @Query() verifyEmailDto: VerifyEmailDto,
+  ): Promise<ApiResponseDto<{ message: string }>> {
+    const result = await this.authService.verifyEmail(verifyEmailDto);
+    return ApiResponseDto.success(result, result.message);
+  }
+
+  @Post('resend-verification')
+  @HttpCode(HttpStatus.OK)
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'Resend the email verification link' })
+  @ApiResponse({
+    status: 200,
+    description: 'Verification email resent successfully',
+  })
+  @ApiResponse({
+    status: 400,
+    description: 'Email is already verified',
+  })
+  @ApiResponse({ status: 401, description: 'Unauthorized' })
+  async resendVerification(
+    @CurrentUser('id') userId: string,
+  ): Promise<ApiResponseDto<{ message: string }>> {
+    const result = await this.authService.resendVerification(userId);
+    return ApiResponseDto.success(result, result.message);
   }
 
   @Post('reset-password')

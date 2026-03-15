@@ -41,17 +41,25 @@ enum SubscriptionTier {
   PREMIUM
 }
 
+enum Role {
+  USER
+  ADMIN
+}
+
 // ==================== USER MODEL ====================
 // Handles authentication and cloud saves for user progress
 
 model User {
-  id                  String    @id @default(cuid())
-  email               String    @unique
-  username            String    @unique
-  password            String
-  avatarUrl           String?
-  passwordResetToken  String?
-  passwordResetExpiry DateTime?
+  id                     String    @id @default(cuid())
+  email                  String    @unique
+  username               String    @unique
+  password               String
+  avatarUrl              String?
+  passwordResetToken     String?
+  passwordResetExpiry    DateTime?
+  emailVerified          Boolean   @default(false)
+  emailVerificationToken String?
+  role                   Role      @default(USER)
 
   // Cloud Save Data
   currentLevel Int       @default(1)

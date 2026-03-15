@@ -22,3 +22,7 @@ out/
 
 # Prisma
 backend/prisma/generated/
+
+# Local uploads
+backend/public/uploads/avatars/*
+!backend/public/uploads/avatars/.gitkeep
