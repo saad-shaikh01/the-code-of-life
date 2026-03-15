@@ -12,8 +12,8 @@ COPY backend/ ./backend/
 # Install all workspace dependencies from root
 RUN npm ci --workspace=backend --workspace=packages/shared --include-workspace-root
 
-# Generate Prisma client (must run before any TypeScript compilation)
-RUN cd backend && npx prisma generate
+# Generate Prisma client (DATABASE_URL is required by prisma.config.ts but not used during generate)
+RUN cd backend && DATABASE_URL="postgresql://x:x@localhost/x" npx prisma generate --schema=prisma/schema.prisma
 
 # Build shared package first
 RUN npm run build --workspace=packages/shared
